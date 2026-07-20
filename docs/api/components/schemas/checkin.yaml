@@ -1,0 +1,69 @@
+CheckInFailureReason:
+  type: string
+  enum:
+    - None
+    - TicketNotFound
+    - EventNotFound
+    - TicketNotPaid
+    - AlreadyCheckedIn
+    - InvalidQrToken
+    - OutsideGeofence
+    - OutsideCheckInWindow
+CheckInRequest:
+  type: object
+  required:
+    - ticketId
+    - qrToken
+    - latitude
+    - longitude
+    - occurredAtUtc
+  properties:
+    ticketId:
+      type: string
+      format: uuid
+    qrToken:
+      type: string
+      maxLength: 200
+    latitude:
+      type: number
+      format: double
+      minimum: -90
+      maximum: 90
+    longitude:
+      type: number
+      format: double
+      minimum: -180
+      maximum: 180
+    occurredAtUtc:
+      type: string
+      format: date-time
+CheckInResponse:
+  type: object
+  required:
+    - ticketId
+    - eventId
+    - success
+    - reason
+    - occurredAtUtc
+  properties:
+    ticketId:
+      type: string
+      format: uuid
+    eventId:
+      type: string
+      format: uuid
+    success:
+      type: boolean
+    reason:
+      $ref: '#/CheckInFailureReason'
+    distanceMeters:
+      type: number
+      format: double
+      nullable: true
+    occurredAtUtc:
+      type: string
+      format: date-time
+    checkedInAtUtc:
+      type: string
+      format: date-time
+      nullable: true

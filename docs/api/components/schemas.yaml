@@ -19,3 +19,9 @@ schemas:
     $ref: './schemas/payments.yaml#/PaymentWebhookRequest'
   PaymentRecord:
     $ref: './schemas/payments.yaml#/PaymentRecord'
+  CheckInFailureReason:
+    $ref: './schemas/checkin.yaml#/CheckInFailureReason'
+  CheckInRequest:
+    $ref: './schemas/checkin.yaml#/CheckInRequest'
+  CheckInResponse:
+    $ref: './schemas/checkin.yaml#/CheckInResponse'

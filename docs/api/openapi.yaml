@@ -16,6 +16,8 @@ paths:
     $ref: './paths/tickets/item.yaml'
   /payments/stripe/webhook:
     $ref: './paths/payments/stripe-webhook.yaml'
+  /checkin:
+    $ref: './paths/checkin.yaml'
 components:
   schemas:
     $ref: './components/schemas.yaml#/schemas'

@@ -1,0 +1,16 @@
+post:
+  summary: Check in a ticket using QR and geofence coordinates
+  operationId: checkIn
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: '../components/schemas.yaml#/schemas/CheckInRequest'
+  responses:
+    '200':
+      description: Check-in result
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas.yaml#/schemas/CheckInResponse'

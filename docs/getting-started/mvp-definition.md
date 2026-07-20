@@ -39,7 +39,9 @@ The MVP is complete when the end-to-end flow below can be executed reliably in a
 
 ### 5) Geofenced Check-In
 - Validate ticket exists and is in `paid` state.
-- Validate location is within event geofence.
+- Validate the QR token from the scan matches the ticket.
+- Validate the attendee device coordinates are within the event geofence.
+- Validate the check-in occurs during the allowed event window.
 - Transition `paid -> checked-in` with idempotency.
 
 ### 6) No-Show + Refund Automation
@@ -74,9 +76,10 @@ The MVP is complete when the end-to-end flow below can be executed reliably in a
 - Duplicate event delivery does not double-transition state.
 
 ### Check-In API
-- Valid paid ticket + in-geofence location returns success and `checked-in`.
+- Valid paid ticket + matching QR token + in-geofence coordinates returns success and `checked-in`.
 - Already checked-in ticket returns deterministic non-success response.
 - Out-of-geofence location rejected with reason code.
+- Check-in is allowed only when the backend validates the decision against the event geofence; the client only supplies coordinates.
 
 ### Refund Processor
 - Runs on schedule after event end.
