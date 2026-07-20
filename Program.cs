@@ -1,10 +1,12 @@
 using zip02.Services.Events;
+using zip02.Services.Ticketing.InMemory;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
 builder.Services.AddSingleton<IEventStore, InMemoryEventStore>();
+builder.Services.AddSingleton<ITicketStore, InMemoryTicketStore>();
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();

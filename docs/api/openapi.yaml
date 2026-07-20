@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: zip02 API
   version: 1.0.0
-  description: Event MVP API for organizer event creation and geofence management.
+  description: MVP API for organizer events, ticket reservation, and geofence-ready lifecycle handling.
 servers:
   - url: https://localhost:5001
 paths:
@@ -72,6 +72,70 @@ paths:
           description: Validation error
         '404':
           description: Event not found
+  /tickets/reserve:
+    post:
+      summary: Reserve a ticket
+      operationId: reserveTicket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReserveTicketRequest'
+      responses:
+        '201':
+          description: Ticket reserved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
+        '400':
+          description: Validation error
+  /tickets/{id}:
+    get:
+      summary: Get a ticket by id
+      operationId: getTicketById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ticket found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
+        '404':
+          description: Ticket not found
+    patch:
+      summary: Partially update a ticket
+      operationId: updateTicket
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTicketRequest'
+      responses:
+        '200':
+          description: Ticket updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
+        '404':
+          description: Ticket not found
 components:
   schemas:
     GeofenceRequest:
@@ -167,3 +231,87 @@ components:
           format: int32
         geofence:
           $ref: '#/components/schemas/GeofenceResponse'
+    ReserveTicketRequest:
+      type: object
+      required:
+        - eventId
+        - attendeeId
+        - attendeeEmail
+        - idempotencyKey
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        attendeeId:
+          type: string
+          maxLength: 100
+        attendeeEmail:
+          type: string
+          format: email
+          maxLength: 320
+        idempotencyKey:
+          type: string
+          maxLength: 100
+    UpdateTicketRequest:
+      type: object
+      properties:
+        attendeeEmail:
+          type: string
+          format: email
+          maxLength: 320
+        notes:
+          type: string
+          maxLength: 500
+    TicketResponse:
+      type: object
+      required:
+        - id
+        - eventId
+        - attendeeId
+        - attendeeEmail
+        - status
+        - reservedAtUtc
+        - expiresAtUtc
+      properties:
+        id:
+          type: string
+          format: uuid
+        eventId:
+          type: string
+          format: uuid
+        attendeeId:
+          type: string
+        attendeeEmail:
+          type: string
+        status:
+          type: string
+          enum: [Reserved, Paid, CheckedIn, Expired, Refunded, Cancelled]
+        reservedAtUtc:
+          type: string
+          format: date-time
+        expiresAtUtc:
+          type: string
+          format: date-time
+        paidAtUtc:
+          type: string
+          format: date-time
+          nullable: true
+        checkedInAtUtc:
+          type: string
+          format: date-time
+          nullable: true
+        expiredAtUtc:
+          type: string
+          format: date-time
+          nullable: true
+        refundedAtUtc:
+          type: string
+          format: date-time
+          nullable: true
+        cancelledAtUtc:
+          type: string
+          format: date-time
+          nullable: true
+        notes:
+          type: string
+          nullable: true
