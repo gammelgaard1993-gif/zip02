@@ -95,9 +95,12 @@ public sealed class InMemoryTicketStore : ITicketStore
 
     public TicketResponse? MarkPaid(Guid id, DateTimeOffset paidAtUtc)
     {
-        return Transition(id, current => current.Status == TicketStatus.Reserved
-            ? Copy(current, TicketStatus.Paid, paidAtUtc: paidAtUtc)
-            : null);
+        return Transition(id, current => current.Status switch
+        {
+            TicketStatus.Reserved => Copy(current, TicketStatus.Paid, paidAtUtc: paidAtUtc),
+            TicketStatus.Paid => current,
+            _ => null
+        });
     }
 
     public TicketResponse? MarkCheckedIn(Guid id, DateTimeOffset checkedInAtUtc)

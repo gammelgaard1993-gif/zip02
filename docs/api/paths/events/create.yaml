@@ -1,0 +1,18 @@
+post:
+  summary: Create an event
+  operationId: createEvent
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: '../../components/schemas.yaml#/schemas/CreateEventRequest'
+  responses:
+    '201':
+      description: Event created
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas.yaml#/schemas/EventResponse'
+    '400':
+      description: Validation error

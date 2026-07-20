@@ -1,0 +1,18 @@
+post:
+  summary: Receive a Stripe-style payment webhook
+  operationId: paymentWebhook
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: '../../components/schemas.yaml#/schemas/PaymentWebhookRequest'
+  responses:
+    '200':
+      description: Payment recorded
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas.yaml#/schemas/PaymentRecord'
+    '409':
+      description: Ticket state prevented a paid transition

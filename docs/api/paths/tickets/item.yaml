@@ -1,0 +1,44 @@
+get:
+  summary: Get a ticket by id
+  operationId: getTicketById
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    '200':
+      description: Ticket found
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas.yaml#/schemas/TicketResponse'
+    '404':
+      description: Ticket not found
+patch:
+  summary: Partially update a ticket
+  operationId: updateTicket
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: '../../components/schemas.yaml#/schemas/UpdateTicketRequest'
+  responses:
+    '200':
+      description: Ticket updated
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas.yaml#/schemas/TicketResponse'
+    '404':
+      description: Ticket not found

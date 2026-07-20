@@ -1,0 +1,46 @@
+get:
+  summary: Get an event by id
+  operationId: getEventById
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    '200':
+      description: Event found
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas.yaml#/schemas/EventResponse'
+    '404':
+      description: Event not found
+patch:
+  summary: Partially update an event
+  operationId: updateEvent
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: '../../components/schemas.yaml#/schemas/UpdateEventRequest'
+  responses:
+    '200':
+      description: Event updated
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas.yaml#/schemas/EventResponse'
+    '400':
+      description: Validation error
+    '404':
+      description: Event not found
