@@ -1,0 +1,84 @@
+ReserveTicketRequest:
+  type: object
+  required:
+    - eventId
+    - attendeeId
+    - attendeeEmail
+    - idempotencyKey
+  properties:
+    eventId:
+      type: string
+      format: uuid
+    attendeeId:
+      type: string
+      maxLength: 100
+    attendeeEmail:
+      type: string
+      format: email
+      maxLength: 320
+    idempotencyKey:
+      type: string
+      maxLength: 100
+UpdateTicketRequest:
+  type: object
+  properties:
+    attendeeEmail:
+      type: string
+      format: email
+      maxLength: 320
+    notes:
+      type: string
+      maxLength: 500
+TicketResponse:
+  type: object
+  required:
+    - id
+    - eventId
+    - attendeeId
+    - attendeeEmail
+    - status
+    - reservedAtUtc
+    - expiresAtUtc
+  properties:
+    id:
+      type: string
+      format: uuid
+    eventId:
+      type: string
+      format: uuid
+    attendeeId:
+      type: string
+    attendeeEmail:
+      type: string
+    status:
+      type: string
+      enum: [Reserved, Paid, CheckedIn, Expired, Refunded, Cancelled]
+    reservedAtUtc:
+      type: string
+      format: date-time
+    expiresAtUtc:
+      type: string
+      format: date-time
+    paidAtUtc:
+      type: string
+      format: date-time
+      nullable: true
+    checkedInAtUtc:
+      type: string
+      format: date-time
+      nullable: true
+    expiredAtUtc:
+      type: string
+      format: date-time
+      nullable: true
+    refundedAtUtc:
+      type: string
+      format: date-time
+      nullable: true
+    cancelledAtUtc:
+      type: string
+      format: date-time
+      nullable: true
+    notes:
+      type: string
+      nullable: true

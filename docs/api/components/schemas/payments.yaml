@@ -1,0 +1,85 @@
+PaymentWebhookRequest:
+  type: object
+  required:
+    - provider
+    - providerEventId
+    - ticketId
+    - eventId
+    - amountMinorUnits
+    - currency
+    - status
+    - occurredAtUtc
+    - correlationId
+  properties:
+    provider:
+      type: string
+      maxLength: 50
+    providerEventId:
+      type: string
+      maxLength: 200
+    ticketId:
+      type: string
+      format: uuid
+    eventId:
+      type: string
+      format: uuid
+    amountMinorUnits:
+      type: integer
+      format: int64
+      minimum: 1
+    currency:
+      type: string
+      maxLength: 3
+    status:
+      type: string
+      enum: [Pending, Succeeded, Failed, Refunded]
+    occurredAtUtc:
+      type: string
+      format: date-time
+    correlationId:
+      type: string
+      maxLength: 200
+PaymentRecord:
+  type: object
+  required:
+    - id
+    - ticketId
+    - eventId
+    - provider
+    - providerEventId
+    - amountMinorUnits
+    - currency
+    - status
+    - occurredAtUtc
+    - processedAtUtc
+    - correlationId
+  properties:
+    id:
+      type: string
+      format: uuid
+    ticketId:
+      type: string
+      format: uuid
+    eventId:
+      type: string
+      format: uuid
+    provider:
+      type: string
+    providerEventId:
+      type: string
+    amountMinorUnits:
+      type: integer
+      format: int64
+    currency:
+      type: string
+    status:
+      type: string
+      enum: [Pending, Succeeded, Failed, Refunded]
+    occurredAtUtc:
+      type: string
+      format: date-time
+    processedAtUtc:
+      type: string
+      format: date-time
+    correlationId:
+      type: string
