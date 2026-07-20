@@ -79,6 +79,16 @@ TicketResponse:
       type: string
       format: date-time
       nullable: true
+    qrToken:
+      type: string
+      nullable: true
+    qrPayload:
+      type: string
+      nullable: true
+    qrIssuedAtUtc:
+      type: string
+      format: date-time
+      nullable: true
     notes:
       type: string
       nullable: true

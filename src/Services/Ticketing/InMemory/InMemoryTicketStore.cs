@@ -20,6 +20,8 @@ public interface ITicketStore
     TicketResponse? MarkRefunded(Guid id, DateTimeOffset refundedAtUtc);
 
     TicketResponse? MarkCancelled(Guid id, DateTimeOffset cancelledAtUtc);
+
+    TicketResponse? MarkQrIssued(Guid id, string token, string renderedPayload, DateTimeOffset issuedAtUtc);
 }
 
 public sealed class InMemoryTicketStore : ITicketStore
@@ -83,6 +85,9 @@ public sealed class InMemoryTicketStore : ITicketStore
                 ExpiredAtUtc = current.ExpiredAtUtc,
                 RefundedAtUtc = current.RefundedAtUtc,
                 CancelledAtUtc = current.CancelledAtUtc,
+                QrToken = current.QrToken,
+                QrPayload = current.QrPayload,
+                QrIssuedAtUtc = current.QrIssuedAtUtc,
                 Notes = request.Notes ?? current.Notes
             };
 
@@ -131,6 +136,15 @@ public sealed class InMemoryTicketStore : ITicketStore
             : null);
     }
 
+    public TicketResponse? MarkQrIssued(Guid id, string token, string renderedPayload, DateTimeOffset issuedAtUtc)
+    {
+        return Transition(id, current => current.Status == TicketStatus.Paid
+            ? current.QrToken is null
+                ? Copy(current, current.Status, qrToken: token, qrPayload: renderedPayload, qrIssuedAtUtc: issuedAtUtc)
+                : current
+            : null);
+    }
+
     private static TicketResponse Copy(
         TicketResponse source,
         TicketStatus status,
@@ -138,7 +152,10 @@ public sealed class InMemoryTicketStore : ITicketStore
         DateTimeOffset? checkedInAtUtc = null,
         DateTimeOffset? expiredAtUtc = null,
         DateTimeOffset? refundedAtUtc = null,
-        DateTimeOffset? cancelledAtUtc = null)
+        DateTimeOffset? cancelledAtUtc = null,
+        string? qrToken = null,
+        string? qrPayload = null,
+        DateTimeOffset? qrIssuedAtUtc = null)
     {
         return new TicketResponse
         {
@@ -154,6 +171,9 @@ public sealed class InMemoryTicketStore : ITicketStore
             ExpiredAtUtc = expiredAtUtc ?? source.ExpiredAtUtc,
             RefundedAtUtc = refundedAtUtc ?? source.RefundedAtUtc,
             CancelledAtUtc = cancelledAtUtc ?? source.CancelledAtUtc,
+            QrToken = qrToken ?? source.QrToken,
+            QrPayload = qrPayload ?? source.QrPayload,
+            QrIssuedAtUtc = qrIssuedAtUtc ?? source.QrIssuedAtUtc,
             Notes = source.Notes
         };
     }

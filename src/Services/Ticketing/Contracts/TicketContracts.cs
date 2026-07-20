@@ -67,5 +67,11 @@ public sealed class TicketResponse
 
     public DateTimeOffset? CancelledAtUtc { get; init; }
 
+    public string? QrToken { get; init; }
+
+    public string? QrPayload { get; init; }
+
+    public DateTimeOffset? QrIssuedAtUtc { get; init; }
+
     public string? Notes { get; init; }
 }
