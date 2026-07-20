@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
+using zip02.Services.Payments.Contracts;
 
-namespace zip02.Services.Payments;
+namespace zip02.Services.Payments.InMemory;
 
 public interface IPaymentStore
 {

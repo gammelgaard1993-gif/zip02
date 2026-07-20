@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace zip02.Services.Payments;
+namespace zip02.Services.Payments.Contracts;
 
 public enum PaymentStatus
 {

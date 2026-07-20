@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace zip02.Services.Ticketing;
+namespace zip02.Services.Ticketing.Contracts;
 
 public enum TicketStatus
 {

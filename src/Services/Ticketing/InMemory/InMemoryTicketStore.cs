@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
+using zip02.Services.Ticketing.Contracts;
 
-namespace zip02.Services.Ticketing;
+namespace zip02.Services.Ticketing.InMemory;
 
 public interface ITicketStore
 {

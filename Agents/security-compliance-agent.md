@@ -9,7 +9,7 @@ user-invocable: true
 Own security posture across APIs, data handling, and third-party integration points.
 
 ## Owns
-- Security review updates in `src/BuildingBlocks/Zip02.Security/**`
+- Security review updates in `src/BuildingBlocks/Security/**`
 - Security controls in service APIs where needed.
 - Security documentation under `docs/security/**`.
 
