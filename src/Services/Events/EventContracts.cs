@@ -4,31 +4,37 @@ namespace zip02.Services.Events;
 
 public sealed class GeofenceRequest
 {
+    [Required]
     [Range(-90, 90)]
-    public double Latitude { get; set; }
+    public double? Latitude { get; set; }
 
+    [Required]
     [Range(-180, 180)]
-    public double Longitude { get; set; }
+    public double? Longitude { get; set; }
 
+    [Required]
     [Range(1, 100000)]
-    public double RadiusMeters { get; set; }
+    public double? RadiusMeters { get; set; }
 }
 
 public sealed class CreateEventRequest
 {
     [Required]
     [MaxLength(200)]
-    public string Name { get; set; } = string.Empty;
-
-    public DateTimeOffset StartAtUtc { get; set; }
-
-    public DateTimeOffset EndAtUtc { get; set; }
-
-    [Range(1, int.MaxValue)]
-    public int Capacity { get; set; }
+    public string? Name { get; set; }
 
     [Required]
-    public GeofenceRequest Geofence { get; set; } = new();
+    public DateTimeOffset? StartAtUtc { get; set; }
+
+    [Required]
+    public DateTimeOffset? EndAtUtc { get; set; }
+
+    [Required]
+    [Range(1, int.MaxValue)]
+    public int? Capacity { get; set; }
+
+    [Required]
+    public GeofenceRequest? Geofence { get; set; }
 }
 
 public sealed class UpdateEventRequest

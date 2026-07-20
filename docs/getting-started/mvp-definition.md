@@ -82,6 +82,14 @@ The MVP is complete when the end-to-end flow below can be executed reliably in a
 - Runs on schedule after event end.
 - Refunds only no-show paid tickets per policy.
 
+## Editability and Change Control
+- Event and ticket update operations use partial `PATCH` semantics.
+- Edits are allowed after an entity exists, but each field is governed by status-based safeguards.
+- Safe edits may be applied in place when they do not change entitlement, fulfillment, or check-in validity.
+- High-impact edits that affect pricing, event assignment, or already-fulfilled tickets should require a deliberate decision path, such as refunding/canceling the current ticket and creating a replacement.
+- No edits are allowed once a ticket is `checked-in` unless a specific recovery workflow is defined.
+- All edits must be auditable and preserve the previous values for troubleshooting and abuse detection.
+
 ## Non-Functional MVP Targets
 - API p95 latency: under 500ms for read/validate paths (excluding external Stripe callback delays).
 - Availability target (dev/demo): 99% during demo windows.

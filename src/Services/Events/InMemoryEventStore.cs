@@ -20,15 +20,15 @@ public sealed class InMemoryEventStore : IEventStore
         var evt = new EventResponse
         {
             Id = Guid.NewGuid(),
-            Name = request.Name.Trim(),
-            StartAtUtc = request.StartAtUtc,
-            EndAtUtc = request.EndAtUtc,
-            Capacity = request.Capacity,
+            Name = request.Name!.Trim(),
+            StartAtUtc = request.StartAtUtc!.Value,
+            EndAtUtc = request.EndAtUtc!.Value,
+            Capacity = request.Capacity!.Value,
             Geofence = new GeofenceResponse
             {
-                Latitude = request.Geofence.Latitude,
-                Longitude = request.Geofence.Longitude,
-                RadiusMeters = request.Geofence.RadiusMeters
+                Latitude = request.Geofence!.Latitude!.Value,
+                Longitude = request.Geofence.Longitude!.Value,
+                RadiusMeters = request.Geofence.RadiusMeters!.Value
             }
         };
 
@@ -61,9 +61,9 @@ public sealed class InMemoryEventStore : IEventStore
                     ? current.Geofence
                     : new GeofenceResponse
                     {
-                        Latitude = request.Geofence.Latitude,
-                        Longitude = request.Geofence.Longitude,
-                        RadiusMeters = request.Geofence.RadiusMeters
+                        Latitude = request.Geofence.Latitude!.Value,
+                        Longitude = request.Geofence.Longitude!.Value,
+                        RadiusMeters = request.Geofence.RadiusMeters!.Value
                     }
             };
 

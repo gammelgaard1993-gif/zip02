@@ -10,7 +10,7 @@ public class EventsController(IEventStore eventStore) : ControllerBase
     [HttpPost]
     public ActionResult<EventResponse> Create([FromBody] CreateEventRequest request)
     {
-        if (!IsTimeRangeValid(request.StartAtUtc, request.EndAtUtc))
+        if (!IsTimeRangeValid(request.StartAtUtc!.Value, request.EndAtUtc!.Value))
         {
             ModelState.AddModelError(nameof(request.EndAtUtc), "EndAtUtc must be greater than StartAtUtc.");
             return ValidationProblem(ModelState);
