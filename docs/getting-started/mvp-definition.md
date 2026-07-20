@@ -90,6 +90,19 @@ The MVP is complete when the end-to-end flow below can be executed reliably in a
 - No edits are allowed once a ticket is `checked-in` unless a specific recovery workflow is defined.
 - All edits must be auditable and preserve the previous values for troubleshooting and abuse detection.
 
+## Contract Design Baseline
+- Required fields are the default for both ticketing and payment contracts.
+- Ticket reservation requests must require the business identity fields needed to create a durable reservation, including event and attendee identity plus an idempotency key.
+- Ticket metadata updates stay partial only where a field has a clear business reason to be optional.
+- Payment events and payment records are separate from ticket lifecycle contracts.
+- Payment-related identifiers, provider status, amounts, currency, and correlation fields belong to payment contracts rather than editable ticket fields.
+- Payment records are append-only from the ticket perspective and should not expose raw payment method details as general ticket fields.
+
+## Remaining Design Decisions
+- Exact ticket fields that may be edited after reservation should stay limited until a clear business case is confirmed.
+- Payment processing is Stripe-first for MVP, but the contract shape remains provider-aware so the payment record can expand later without changing ticket fields.
+- Any future payment-method details should remain in provider-specific payment records, not in the general ticket contract.
+
 ## Non-Functional MVP Targets
 - API p95 latency: under 500ms for read/validate paths (excluding external Stripe callback delays).
 - Availability target (dev/demo): 99% during demo windows.
