@@ -46,7 +46,8 @@ The MVP is complete when the end-to-end flow below can be executed reliably in a
 
 ### 6) No-Show + Refund Automation
 - EventBridge-triggered post-event reconciliation.
-- Policy-based no-show evaluation and optional `paid -> refunded`.
+- Evaluate paid tickets that never checked in.
+- All no-show paid tickets are refunded.
 - Audit log/event output for each decision.
 
 ### 7) Operational Baseline
@@ -83,7 +84,13 @@ The MVP is complete when the end-to-end flow below can be executed reliably in a
 
 ### Refund Processor
 - Runs on schedule after event end.
-- Refunds only no-show paid tickets per policy.
+- Evaluates paid tickets that are not checked in.
+- Refunds all eligible no-show paid tickets.
+- Records an auditable outcome for every ticket evaluated.
+
+### Manual Refund API
+- Supports organizer/admin refund request before ticket activation/check-in.
+- Checked-in tickets are never refundable through the pre-activation endpoint.
 
 ## Editability and Change Control
 - Event and ticket update operations use partial `PATCH` semantics.

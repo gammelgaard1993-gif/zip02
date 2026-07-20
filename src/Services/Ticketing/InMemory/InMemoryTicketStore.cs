@@ -9,6 +9,8 @@ public interface ITicketStore
 
     TicketResponse? Get(Guid id);
 
+    IReadOnlyCollection<TicketResponse> GetByEvent(Guid eventId);
+
     TicketResponse? Update(Guid id, UpdateTicketRequest request);
 
     TicketResponse? MarkPaid(Guid id, DateTimeOffset paidAtUtc);
@@ -55,6 +57,11 @@ public sealed class InMemoryTicketStore : ITicketStore
     public TicketResponse? Get(Guid id)
     {
         return _tickets.TryGetValue(id, out var ticket) ? ticket : null;
+    }
+
+    public IReadOnlyCollection<TicketResponse> GetByEvent(Guid eventId)
+    {
+        return _tickets.Values.Where(t => t.EventId == eventId).ToArray();
     }
 
     public TicketResponse? Update(Guid id, UpdateTicketRequest request)

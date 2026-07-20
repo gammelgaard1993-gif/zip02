@@ -1,0 +1,70 @@
+RefundDecisionReason:
+  type: string
+  enum:
+    - None
+    - EventNotFound
+    - EventNotEnded
+    - TicketNotFound
+    - TicketNotPaid
+    - TicketCheckedIn
+    - AlreadyRefunded
+    - Refunded
+ManualRefundRequest:
+  type: object
+  required:
+    - correlationId
+    - requestedAtUtc
+  properties:
+    correlationId:
+      type: string
+      maxLength: 200
+    requestedAtUtc:
+      type: string
+      format: date-time
+RefundTicketResult:
+  type: object
+  required:
+    - ticketId
+    - eventId
+    - refunded
+    - reason
+    - processedAtUtc
+  properties:
+    ticketId:
+      type: string
+      format: uuid
+    eventId:
+      type: string
+      format: uuid
+    refunded:
+      type: boolean
+    reason:
+      $ref: '#/RefundDecisionReason'
+    processedAtUtc:
+      type: string
+      format: date-time
+NoShowReconciliationResult:
+  type: object
+  required:
+    - eventId
+    - processedAtUtc
+    - refundedCount
+    - evaluatedCount
+    - tickets
+  properties:
+    eventId:
+      type: string
+      format: uuid
+    processedAtUtc:
+      type: string
+      format: date-time
+    refundedCount:
+      type: integer
+      format: int32
+    evaluatedCount:
+      type: integer
+      format: int32
+    tickets:
+      type: array
+      items:
+        $ref: '#/RefundTicketResult'

@@ -25,3 +25,11 @@ schemas:
     $ref: './schemas/checkin.yaml#/CheckInRequest'
   CheckInResponse:
     $ref: './schemas/checkin.yaml#/CheckInResponse'
+  RefundDecisionReason:
+    $ref: './schemas/refunds.yaml#/RefundDecisionReason'
+  ManualRefundRequest:
+    $ref: './schemas/refunds.yaml#/ManualRefundRequest'
+  RefundTicketResult:
+    $ref: './schemas/refunds.yaml#/RefundTicketResult'
+  NoShowReconciliationResult:
+    $ref: './schemas/refunds.yaml#/NoShowReconciliationResult'

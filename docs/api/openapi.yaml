@@ -18,6 +18,10 @@ paths:
     $ref: './paths/payments/stripe-webhook.yaml'
   /checkin:
     $ref: './paths/checkin.yaml'
+  /refunds/events/{eventId}/reconcile:
+    $ref: './paths/refunds/reconcile.yaml'
+  /refunds/tickets/{ticketId}:
+    $ref: './paths/refunds/manual-ticket.yaml'
 components:
   schemas:
     $ref: './components/schemas.yaml#/schemas'

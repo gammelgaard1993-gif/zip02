@@ -1,0 +1,23 @@
+post:
+  summary: Refund a ticket before activation/check-in
+  operationId: refundBeforeActivation
+  parameters:
+    - name: ticketId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: '../../components/schemas.yaml#/schemas/ManualRefundRequest'
+  responses:
+    '200':
+      description: Refund decision
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas.yaml#/schemas/RefundTicketResult'

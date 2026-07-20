@@ -1,0 +1,17 @@
+post:
+  summary: Reconcile no-shows for an event after event end
+  operationId: reconcileNoShows
+  parameters:
+    - name: eventId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    '200':
+      description: Reconciliation result
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas.yaml#/schemas/NoShowReconciliationResult'
