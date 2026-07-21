@@ -30,4 +30,18 @@ public class TicketsController(ITicketStore ticketStore) : ControllerBase
         var updated = ticketStore.Update(id, request);
         return updated is null ? NotFound() : Ok(updated);
     }
+
+    [HttpPost("expire-reservations")]
+    public ActionResult<ExpireReservationsResponse> ExpireReservations([FromBody] ExpireReservationsRequest? request)
+    {
+        var processedAtUtc = request?.ProcessedAtUtc ?? DateTimeOffset.UtcNow;
+        var expired = ticketStore.ExpireReservations(processedAtUtc);
+
+        return Ok(new ExpireReservationsResponse
+        {
+            ProcessedAtUtc = processedAtUtc,
+            ExpiredCount = expired.Count,
+            TicketIds = expired.Select(t => t.Id).ToArray()
+        });
+    }
 }

@@ -13,6 +13,10 @@ schemas:
     $ref: './schemas/tickets.yaml#/ReserveTicketRequest'
   UpdateTicketRequest:
     $ref: './schemas/tickets.yaml#/UpdateTicketRequest'
+  ExpireReservationsRequest:
+    $ref: './schemas/tickets.yaml#/ExpireReservationsRequest'
+  ExpireReservationsResponse:
+    $ref: './schemas/tickets.yaml#/ExpireReservationsResponse'
   TicketResponse:
     $ref: './schemas/tickets.yaml#/TicketResponse'
   PaymentWebhookRequest:

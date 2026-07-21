@@ -1,0 +1,16 @@
+post:
+  summary: Expire reserved tickets past TTL
+  operationId: expireReservations
+  requestBody:
+    required: false
+    content:
+      application/json:
+        schema:
+          $ref: '../../components/schemas.yaml#/schemas/ExpireReservationsRequest'
+  responses:
+    '200':
+      description: Reservation expiration reconciliation completed
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas.yaml#/schemas/ExpireReservationsResponse'

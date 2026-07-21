@@ -14,6 +14,8 @@ paths:
     $ref: './paths/tickets/reserve.yaml'
   /tickets/{id}:
     $ref: './paths/tickets/item.yaml'
+  /tickets/expire-reservations:
+    $ref: './paths/tickets/expire-reservations.yaml'
   /payments/stripe/webhook:
     $ref: './paths/payments/stripe-webhook.yaml'
   /checkin:

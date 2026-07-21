@@ -19,6 +19,8 @@ public interface ITicketStore
 
     TicketResponse? MarkExpired(Guid id, DateTimeOffset expiredAtUtc);
 
+    IReadOnlyCollection<TicketResponse> ExpireReservations(DateTimeOffset processedAtUtc);
+
     TicketResponse? MarkRefunded(Guid id, DateTimeOffset refundedAtUtc);
 
     TicketResponse? MarkCancelled(Guid id, DateTimeOffset cancelledAtUtc);
@@ -127,6 +129,26 @@ public sealed class InMemoryTicketStore : ITicketStore
         return Transition(id, current => current.Status == TicketStatus.Reserved
             ? Copy(current, TicketStatus.Expired, expiredAtUtc: expiredAtUtc)
             : null);
+    }
+
+    public IReadOnlyCollection<TicketResponse> ExpireReservations(DateTimeOffset processedAtUtc)
+    {
+        var expiredTickets = new List<TicketResponse>();
+        var expiredCandidates = _tickets.Values
+            .Where(t => t.Status == TicketStatus.Reserved && t.ExpiresAtUtc <= processedAtUtc)
+            .Select(t => t.Id)
+            .ToArray();
+
+        foreach (var ticketId in expiredCandidates)
+        {
+            var expired = MarkExpired(ticketId, processedAtUtc);
+            if (expired is not null)
+            {
+                expiredTickets.Add(expired);
+            }
+        }
+
+        return expiredTickets;
     }
 
     public TicketResponse? MarkRefunded(Guid id, DateTimeOffset refundedAtUtc)

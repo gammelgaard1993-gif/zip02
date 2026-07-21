@@ -41,6 +41,20 @@ public sealed class UpdateTicketRequest
     public string? Notes { get; set; }
 }
 
+public sealed class ExpireReservationsRequest
+{
+    public DateTimeOffset? ProcessedAtUtc { get; set; }
+}
+
+public sealed class ExpireReservationsResponse
+{
+    public DateTimeOffset ProcessedAtUtc { get; init; }
+
+    public int ExpiredCount { get; init; }
+
+    public IReadOnlyCollection<Guid> TicketIds { get; init; } = Array.Empty<Guid>();
+}
+
 public sealed class TicketResponse
 {
     public Guid Id { get; init; }

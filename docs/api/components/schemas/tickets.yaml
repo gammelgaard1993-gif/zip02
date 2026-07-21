@@ -29,6 +29,30 @@ UpdateTicketRequest:
     notes:
       type: string
       maxLength: 500
+ExpireReservationsRequest:
+  type: object
+  properties:
+    processedAtUtc:
+      type: string
+      format: date-time
+ExpireReservationsResponse:
+  type: object
+  required:
+    - processedAtUtc
+    - expiredCount
+    - ticketIds
+  properties:
+    processedAtUtc:
+      type: string
+      format: date-time
+    expiredCount:
+      type: integer
+      minimum: 0
+    ticketIds:
+      type: array
+      items:
+        type: string
+        format: uuid
 TicketResponse:
   type: object
   required:
