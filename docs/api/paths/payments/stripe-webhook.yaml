@@ -1,6 +1,13 @@
 post:
   summary: Receive a Stripe-style payment webhook
   operationId: paymentWebhook
+  parameters:
+    - in: header
+      name: Stripe-Signature
+      required: true
+      schema:
+        type: string
+      description: Stripe signature in the format `t=<unix>,v1=<hmac>`.
   requestBody:
     required: true
     content:
@@ -14,5 +21,9 @@ post:
         application/json:
           schema:
             $ref: '../../components/schemas.yaml#/schemas/PaymentRecord'
+    '401':
+      description: Webhook signature validation failed
     '409':
       description: Ticket state prevented a paid transition
+    '503':
+      description: Webhook secret is not configured
