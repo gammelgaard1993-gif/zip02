@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  localstack:
+    image: localstack/localstack:3.8
+    container_name: zip02-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=dynamodb,sns,events,sqs,s3,ssm,cloudwatch,logs
+      - DEBUG=0
+      - AWS_DEFAULT_REGION=eu-west-1
+      - PERSISTENCE=0
+    volumes:
+      - ./localstack:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock

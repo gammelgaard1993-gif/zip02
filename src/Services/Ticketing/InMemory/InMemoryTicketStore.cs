@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using zip02.Services.Ticketing.Contracts;
+using static zip02.Services.Ticketing.Contracts.TicketCopy;
 
 namespace zip02.Services.Ticketing.InMemory;
 
@@ -80,25 +81,11 @@ public sealed class InMemoryTicketStore : ITicketStore
                 return current;
             }
 
-            var updated = new TicketResponse
-            {
-                Id = current.Id,
-                EventId = current.EventId,
-                AttendeeId = current.AttendeeId,
-                AttendeeEmail = string.IsNullOrWhiteSpace(request.AttendeeEmail) ? current.AttendeeEmail : request.AttendeeEmail.Trim(),
-                Status = current.Status,
-                ReservedAtUtc = current.ReservedAtUtc,
-                ExpiresAtUtc = current.ExpiresAtUtc,
-                PaidAtUtc = current.PaidAtUtc,
-                CheckedInAtUtc = current.CheckedInAtUtc,
-                ExpiredAtUtc = current.ExpiredAtUtc,
-                RefundedAtUtc = current.RefundedAtUtc,
-                CancelledAtUtc = current.CancelledAtUtc,
-                QrToken = current.QrToken,
-                QrPayload = current.QrPayload,
-                QrIssuedAtUtc = current.QrIssuedAtUtc,
-                Notes = request.Notes ?? current.Notes
-            };
+            var updated = Copy(
+                current,
+                current.Status,
+                attendeeEmail: string.IsNullOrWhiteSpace(request.AttendeeEmail) ? null : request.AttendeeEmail.Trim(),
+                notes: request.Notes);
 
             if (_tickets.TryUpdate(id, updated, current))
             {
@@ -174,38 +161,6 @@ public sealed class InMemoryTicketStore : ITicketStore
             : null);
     }
 
-    private static TicketResponse Copy(
-        TicketResponse source,
-        TicketStatus status,
-        DateTimeOffset? paidAtUtc = null,
-        DateTimeOffset? checkedInAtUtc = null,
-        DateTimeOffset? expiredAtUtc = null,
-        DateTimeOffset? refundedAtUtc = null,
-        DateTimeOffset? cancelledAtUtc = null,
-        string? qrToken = null,
-        string? qrPayload = null,
-        DateTimeOffset? qrIssuedAtUtc = null)
-    {
-        return new TicketResponse
-        {
-            Id = source.Id,
-            EventId = source.EventId,
-            AttendeeId = source.AttendeeId,
-            AttendeeEmail = source.AttendeeEmail,
-            Status = status,
-            ReservedAtUtc = source.ReservedAtUtc,
-            ExpiresAtUtc = source.ExpiresAtUtc,
-            PaidAtUtc = paidAtUtc ?? source.PaidAtUtc,
-            CheckedInAtUtc = checkedInAtUtc ?? source.CheckedInAtUtc,
-            ExpiredAtUtc = expiredAtUtc ?? source.ExpiredAtUtc,
-            RefundedAtUtc = refundedAtUtc ?? source.RefundedAtUtc,
-            CancelledAtUtc = cancelledAtUtc ?? source.CancelledAtUtc,
-            QrToken = qrToken ?? source.QrToken,
-            QrPayload = qrPayload ?? source.QrPayload,
-            QrIssuedAtUtc = qrIssuedAtUtc ?? source.QrIssuedAtUtc,
-            Notes = source.Notes
-        };
-    }
 
     private TicketResponse? Transition(Guid id, Func<TicketResponse, TicketResponse?> transition)
     {

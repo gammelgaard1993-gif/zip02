@@ -89,3 +89,45 @@ public sealed class TicketResponse
 
     public string? Notes { get; init; }
 }
+
+/// <summary>
+/// Shared copy helper used by all ITicketStore implementations to produce
+/// a new TicketResponse with updated fields, preserving all other values from source.
+/// </summary>
+public static class TicketCopy
+{
+    public static TicketResponse Copy(
+        TicketResponse source,
+        TicketStatus status,
+        DateTimeOffset? paidAtUtc = null,
+        DateTimeOffset? checkedInAtUtc = null,
+        DateTimeOffset? expiredAtUtc = null,
+        DateTimeOffset? refundedAtUtc = null,
+        DateTimeOffset? cancelledAtUtc = null,
+        string? qrToken = null,
+        string? qrPayload = null,
+        DateTimeOffset? qrIssuedAtUtc = null,
+        string? attendeeEmail = null,
+        string? notes = null)
+    {
+        return new TicketResponse
+        {
+            Id = source.Id,
+            EventId = source.EventId,
+            AttendeeId = source.AttendeeId,
+            AttendeeEmail = attendeeEmail ?? source.AttendeeEmail,
+            Status = status,
+            ReservedAtUtc = source.ReservedAtUtc,
+            ExpiresAtUtc = source.ExpiresAtUtc,
+            PaidAtUtc = paidAtUtc ?? source.PaidAtUtc,
+            CheckedInAtUtc = checkedInAtUtc ?? source.CheckedInAtUtc,
+            ExpiredAtUtc = expiredAtUtc ?? source.ExpiredAtUtc,
+            RefundedAtUtc = refundedAtUtc ?? source.RefundedAtUtc,
+            CancelledAtUtc = cancelledAtUtc ?? source.CancelledAtUtc,
+            QrToken = qrToken ?? source.QrToken,
+            QrPayload = qrPayload ?? source.QrPayload,
+            QrIssuedAtUtc = qrIssuedAtUtc ?? source.QrIssuedAtUtc,
+            Notes = notes ?? source.Notes
+        };
+    }
+}
