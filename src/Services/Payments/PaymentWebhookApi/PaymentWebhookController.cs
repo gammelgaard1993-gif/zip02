@@ -17,7 +17,8 @@ public class PaymentWebhookController(
     IPaymentStore paymentStore,
     ITicketStore ticketStore,
     INotificationStore notificationStore,
-    IConfiguration configuration) : ControllerBase
+    IConfiguration configuration,
+    ILogger<PaymentWebhookController> logger) : ControllerBase
 {
     private const string SignatureHeader = "Stripe-Signature";
     private const int DefaultTimestampToleranceSeconds = 300;
@@ -65,8 +66,14 @@ public class PaymentWebhookController(
         var existing = paymentStore.GetByProviderEventId(request.ProviderEventId!);
         if (existing is not null)
         {
+            // Idempotent re-delivery: the payment event was already processed.
+            // Re-trigger QR + email for Succeeded events in case a prior delivery attempt
+            // was interrupted before notification was sent.
             if (existing.Status == PaymentStatus.Succeeded)
             {
+                logger.LogInformation(
+                    "Idempotent webhook re-delivery for ticket {TicketId} (providerEventId={ProviderEventId})",
+                    existing.TicketId, existing.ProviderEventId);
                 CompleteQrDelivery(existing.TicketId, existing.CorrelationId, existing.OccurredAtUtc);
             }
 
@@ -151,11 +158,20 @@ public class PaymentWebhookController(
         var ticket = ticketStore.MarkPaid(ticketId, occurredAtUtc);
         if (ticket is null)
         {
+            // Ticket not found or already in a terminal state — log a warning so this
+            // can be correlated with the Stripe event if it needs manual investigation.
+            logger.LogWarning(
+                "QR delivery skipped: ticket {TicketId} could not be transitioned to Paid (correlationId={CorrelationId})",
+                ticketId, correlationId);
             return false;
         }
 
         var qr = notificationStore.IssueQr(ticket, occurredAtUtc);
         ticketStore.MarkQrIssued(ticket.Id, qr.Token!, qr.RenderedPayload!, qr.CreatedAtUtc);
+
+        logger.LogInformation(
+            "QR issued for ticket {TicketId} (correlationId={CorrelationId})",
+            ticket.Id, correlationId);
 
         notificationStore.SendEmail(new EmailNotificationRequest
         {
@@ -165,6 +181,10 @@ public class PaymentWebhookController(
             Body = qr.RenderedPayload!,
             CorrelationId = correlationId
         }, occurredAtUtc);
+
+        logger.LogInformation(
+            "Email notification dispatched for ticket {TicketId} to {AttendeeEmail} (correlationId={CorrelationId})",
+            ticket.Id, ticket.AttendeeEmail, correlationId);
 
         return true;
     }
