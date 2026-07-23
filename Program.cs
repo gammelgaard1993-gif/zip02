@@ -1,36 +1,69 @@
+using Amazon.DynamoDBv2;
+using Amazon.Extensions.NETCore.Setup;
 using zip02.Services.Events;
 using zip02.Services.Notifications.InMemory;
 using zip02.Services.Payments.InMemory;
 using zip02.Services.Refunds.Infrastructure;
+using zip02.Services.Ticketing.DynamoDB;
 using zip02.Services.Ticketing.InMemory;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// ── Persistence: Ticketing ────────────────────────────────────────────────────
+// Behaviour is driven by DynamoDB:TableName in configuration:
+//   · Empty (default) → InMemoryTicketStore.  No AWS credentials required.
+//                        Suitable for local development and all unit/E2E tests.
+//   · Set             → DynamoDbTicketStore backed by the named table.
+//                        Uses the standard AWS SDK credential chain (IAM role,
+//                        instance profile, environment variables).
+//                        Override the endpoint for LocalStack via AWS:ServiceURL.
 
+var dynamoTableName = builder.Configuration["DynamoDB:TableName"];
+
+if (!string.IsNullOrWhiteSpace(dynamoTableName))
+{
+    // AWSOptions reads AWS:Region and AWS:ServiceURL from IConfiguration.
+    // AmazonDynamoDBClient is thread-safe — register as Singleton to reuse the
+    // underlying HTTP connection pool across requests.
+    var awsOptions = builder.Configuration.GetAWSOptions();
+    builder.Services.AddSingleton<IAmazonDynamoDB>(_ => awsOptions.CreateServiceClient<IAmazonDynamoDB>());
+    builder.Services.AddSingleton<ITicketStore>(sp =>
+        new DynamoDbTicketStore(sp.GetRequiredService<IAmazonDynamoDB>(), dynamoTableName));
+}
+else
+{
+    // In-memory store: zero external dependencies, data lives only for the
+    // lifetime of the process.
+    builder.Services.AddSingleton<ITicketStore, InMemoryTicketStore>();
+}
+
+// ── Persistence: Events, Payments, Notifications, Refunds ────────────────────
+// These services use in-memory stores for the MVP.
+// Each will be replaced with its DynamoDB counterpart in a future step once the
+// single-table schema is extended to cover them.
 builder.Services.AddSingleton<IEventStore, InMemoryEventStore>();
-builder.Services.AddSingleton<ITicketStore, InMemoryTicketStore>();
 builder.Services.AddSingleton<IPaymentStore, InMemoryPaymentStore>();
 builder.Services.AddSingleton<INotificationStore, InMemoryNotificationStore>();
 builder.Services.AddSingleton<IRefundProcessor, InMemoryRefundProcessor>();
+
+// ── API layer ─────────────────────────────────────────────────────────────────
 builder.Services.AddControllers();
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// ── Middleware pipeline ───────────────────────────────────────────────────────
 if (app.Environment.IsDevelopment())
 {
+    // Expose the OpenAPI document only in development — not in production.
     app.MapOpenApi();
 }
 
 app.UseHttpsRedirection();
-
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();
 
 public partial class Program;
+
