@@ -1,0 +1,500 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  zip02 — Geofenced Event Ticketing & Check-In
+  Single Lambda (ASP.NET Core on provided.al2023) fronted by HTTP API Gateway,
+  backed by a single DynamoDB table, with an EventBridge schedule for
+  post-event no-show reconciliation.
+
+# ── Parameters ────────────────────────────────────────────────────────────────
+# All environment-specific values are passed via infra/sam/parameters/<env>.json
+# so the template itself stays environment-agnostic.
+Parameters:
+
+  Env:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, test, prod]
+    Description: Deployment environment. Controls deletion policy, billing mode, and log retention.
+
+  TableName:
+    Type: String
+    Default: zip02-tickets
+    Description: DynamoDB table name. Must be unique per AWS account/region.
+
+  StripeWebhookSecretSsmPath:
+    Type: AWS::SSM::Parameter::Name
+    Default: /zip02/dev/stripe/webhook-secret
+    Description: SSM Parameter Store path that holds the Stripe webhook signing secret.
+
+  BillingMode:
+    Type: String
+    Default: PAY_PER_REQUEST
+    AllowedValues: [PAY_PER_REQUEST, PROVISIONED]
+    Description: >
+      DynamoDB billing mode.
+      Use PAY_PER_REQUEST for dev/test; PROVISIONED (with ProvisionedThroughput) for prod.
+
+  LambdaMemoryMb:
+    Type: Number
+    Default: 512
+    Description: Lambda memory in MB. Increase for prod if p95 latency target is not met.
+
+  LambdaTimeoutSeconds:
+    Type: Number
+    Default: 29
+    Description: >
+      Lambda timeout. Set to 29 s to stay under API Gateway's 30 s hard limit while
+      leaving 1 s for cold-start overhead.
+
+  LogRetentionDays:
+    Type: Number
+    Default: 14
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 180, 365]
+    Description: CloudWatch Logs retention in days.
+
+# ── Conditions ────────────────────────────────────────────────────────────────
+Conditions:
+  # Used to set DeletionPolicy on the DynamoDB table — prod tables are retained
+  # on stack deletion so that data is never lost accidentally.
+  IsProd: !Equals [!Ref Env, prod]
+
+# ── Globals ───────────────────────────────────────────────────────────────────
+# Defaults applied to every AWS::Serverless::Function in this template.
+# Per-function overrides are still allowed where needed.
+Globals:
+  Function:
+    Runtime: provided.al2023
+    Architectures: [x86_64]
+    MemorySize: !Ref LambdaMemoryMb
+    Timeout: !Ref LambdaTimeoutSeconds
+    # Active X-Ray tracing on every function — off by default in Lambda,
+    # enabled here so distributed traces flow through to DynamoDB segments.
+    Tracing: Active
+    # Structured JSON logs make CloudWatch Insights queries straightforward.
+    LoggingConfig:
+      LogFormat: JSON
+      ApplicationLogLevel: INFO
+      SystemLogLevel: WARN
+    Environment:
+      Variables:
+        # Makes the Lambda runtime aware of which environment it is in.
+        ASPNETCORE_ENVIRONMENT: !Ref Env
+        # Propagate DynamoDB table name to the ASP.NET Core configuration system.
+        # The double-underscore is .NET's section separator for environment variables,
+        # so this resolves to Configuration["DynamoDB:TableName"].
+        DynamoDB__TableName: !Ref TableName
+        # AWS SDK region — picked up by AWSSDK.Extensions.NETCore.Setup.
+        AWS__Region: !Sub "${AWS::Region}"
+
+# ── Resources ─────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── DynamoDB: single-table (ADR-001) ───────────────────────────────────────
+  # One table holds tickets, idempotency records, and (future) events/payments.
+  # Design:
+  #   PK  = entity-type prefix + ID  e.g. TICKET#<guid:N>, IDEM#<key>
+  #   SK  = entity type constant     e.g. TICKET, IDEM
+  # GSI-1 allows querying all tickets for a given event (capacity enforcement).
+  TicketsTable:
+    Type: AWS::DynamoDB::Table
+    # Retain prod tables on stack deletion — dev/test tables are deleted with
+    # the stack so ephemeral environments stay clean.
+    DeletionPolicy: !If [IsProd, Retain, Delete]
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Ref TableName
+      BillingMode: !Ref BillingMode
+
+      AttributeDefinitions:
+        # Primary key attributes
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        # GSI-1: EventId → look up all tickets for an event
+        - AttributeName: EventId
+          AttributeType: S
+        # GSI-1 sort: Status → filter by ticket state (e.g. Reserved+Paid for capacity)
+        - AttributeName: Status
+          AttributeType: S
+
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+
+      GlobalSecondaryIndexes:
+        - IndexName: EventId-Status-index
+          KeySchema:
+            - AttributeName: EventId
+              KeyType: HASH
+            - AttributeName: Status
+              KeyType: RANGE
+          Projection:
+            # Project all attributes so the Lambda never needs a second GetItem
+            # when validating capacity or listing tickets for an event.
+            ProjectionType: ALL
+
+      # TTL: DynamoDB automatically deletes expired Reserved tickets.
+      # The ExpiresAt attribute is set (as Unix epoch seconds) by DynamoDbTicketStore.
+      TimeToLiveSpecification:
+        AttributeName: ExpiresAt
+        Enabled: true
+
+      # Server-side encryption with the AWS-managed key (free tier, no extra latency).
+      # Switch to a CMK for prod if compliance requires customer-managed keys.
+      SSESpecification:
+        SSEEnabled: true
+
+      # Enable Point-in-Time Recovery for prod so any 35-day window can be restored.
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
+
+      Tags:
+        - Key: Project
+          Value: zip02
+        - Key: Env
+          Value: !Ref Env
+
+  # CloudWatch log group for the DynamoDB table — kept for audit/metrics.
+  # (DynamoDB itself streams to CloudTrail; this group is for application-level
+  #  log queries tied to table ARN correlation.)
+  TicketsTableLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/zip02/${Env}/dynamodb/${TableName}"
+      RetentionInDays: !Ref LogRetentionDays
+
+  # ── IAM: Lambda execution role ─────────────────────────────────────────────
+  # Principle of least privilege per the MVP IAM baseline:
+  #   - DynamoDB data-plane actions scoped to this table and its GSI only.
+  #   - SSM read-only for the Stripe webhook secret path.
+  #   - CloudWatch Logs: create log group/stream + put events.
+  #   - X-Ray: put trace segments and sub-segments.
+  #   - No wildcard actions. No wildcard resources.
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "zip02-${Env}-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        # ── DynamoDB ───────────────────────────────────────────────────────
+        # Only the actions each service path actually calls (ADR-001 baseline).
+        - PolicyName: DynamoDBTableAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: TableDataPlane
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  # Table itself
+                  - !GetAtt TicketsTable.Arn
+                  # GSI — must be listed separately for Query to work
+                  - !Sub "${TicketsTable.Arn}/index/EventId-Status-index"
+
+        # ── SSM Parameter Store ────────────────────────────────────────────
+        # Read-only access to the Stripe webhook secret parameter only.
+        # The explicit resource path avoids granting access to other secrets.
+        - PolicyName: SsmStripeSecretRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadStripeWebhookSecret
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParametersByPath
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${StripeWebhookSecretSsmPath}"
+
+        # ── CloudWatch Logs ────────────────────────────────────────────────
+        # Standard Lambda logging permissions scoped to this function's log group.
+        # The log group is created explicitly below so the function never needs
+        # CreateLogGroup (reduces blast radius if the role is ever misused).
+        - PolicyName: CloudWatchLogsWrite
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: WriteLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/zip02-${Env}:*"
+
+        # ── X-Ray ──────────────────────────────────────────────────────────
+        # Required by Tracing: Active in Globals.
+        - PolicyName: XRayTracing
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: PutTraceSegments
+                Effect: Allow
+                Action:
+                  - xray:PutTraceSegments
+                  - xray:PutTelemetryRecords
+                # X-Ray does not support resource-level restrictions for these actions.
+                Resource: "*"
+
+        # ── SQS Dead-Letter Queue ──────────────────────────────────────────
+        # Allow Lambda to send failed async invocations to the DLQ.
+        - PolicyName: DlqSendMessage
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: SendToDlq
+                Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource: !GetAtt LambdaDeadLetterQueue.Arn
+
+      Tags:
+        - Key: Project
+          Value: zip02
+        - Key: Env
+          Value: !Ref Env
+
+  # ── SQS: Dead-Letter Queue ─────────────────────────────────────────────────
+  # Catches Lambda invocations that fail after all retries (async invocations
+  # only — synchronous HTTP invocations surface errors directly to the caller).
+  # Messages here indicate either a code bug or a downstream outage and should
+  # trigger an alarm (see infra/monitoring/alarms/core-alarms.json).
+  LambdaDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "zip02-${Env}-dlq"
+      # Keep failed messages for 4 days so there is time to investigate and replay.
+      MessageRetentionPeriod: 345600
+      # Encrypt at rest with the SQS-managed key.
+      SqsManagedSseEnabled: true
+      Tags:
+        - Key: Project
+          Value: zip02
+        - Key: Env
+          Value: !Ref Env
+
+  # ── Lambda: CloudWatch log group ───────────────────────────────────────────
+  # Created explicitly so retention is controlled and the IAM policy can
+  # reference the ARN before the function is deployed.
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/zip02-${Env}"
+      RetentionInDays: !Ref LogRetentionDays
+
+  # ── Lambda: ASP.NET Core application function ──────────────────────────────
+  # The function hosts the full ASP.NET Core web API via
+  # Amazon.Lambda.AspNetCoreServer.Hosting. Every HTTP route becomes a Lambda
+  # invocation; the HTTP API Gateway proxy event is translated to an
+  # HttpContext by the hosting package.
+  #
+  # Build notes:
+  #   SAM runs `dotnet publish -c Release -r linux-x64 --self-contained true`
+  #   because .NET 10 is not a managed Lambda runtime. The bootstrap executable
+  #   produced by the Lambda hosting package satisfies the provided.al2023
+  #   bootstrap contract.
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      # Tell SAM to build this function as a .NET self-contained binary.
+      BuildMethod: dotnet-lambda
+      BuildProperties:
+        Framework: net10.0
+        # Self-contained avoids the need for a .NET runtime layer.
+        # linux-x64 targets the x86_64 architecture declared in Globals.
+        PackageType: Zip
+        ExtraArgs: "--self-contained true -r linux-x64"
+    Properties:
+      FunctionName: !Sub "zip02-${Env}"
+      # Handler for Amazon.Lambda.AspNetCoreServer.Hosting — the package
+      # registers its own bootstrap handler; this value satisfies SAM validation.
+      Handler: bootstrap
+      CodeUri: ../../
+      Role: !GetAtt LambdaExecutionRole.Arn
+      # The log group is managed explicitly above — do not let SAM auto-create it.
+      LoggingConfig:
+        LogGroup: !Ref LambdaLogGroup
+
+      Environment:
+        Variables:
+          # Stripe webhook secret injected from SSM at deploy time.
+          # The double-underscore maps to Configuration["Payments:Stripe:WebhookSecret"].
+          Payments__Stripe__WebhookSecret: !Sub "{{resolve:ssm:${StripeWebhookSecretSsmPath}}}"
+
+      # Failed async invocations (e.g. EventBridge reconciliation) go to the DLQ.
+      DeadLetterQueue:
+        Type: SQS
+        TargetArn: !GetAtt LambdaDeadLetterQueue.Arn
+
+      Events:
+        # ── HTTP API Gateway: catch-all proxy ─────────────────────────────
+        # All routes and methods are forwarded to the ASP.NET Core router.
+        # HTTP API (v2 payload) is used over REST API for lower cost and latency.
+        HttpApiProxy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /{proxy+}
+            Method: ANY
+        # Root path (/) also needs an explicit route — /{proxy+} does not match it.
+        HttpApiRoot:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /
+            Method: ANY
+
+  # ── HTTP API Gateway ───────────────────────────────────────────────────────
+  # v2 HTTP API: lower cost (~70 % cheaper than REST API), lower latency,
+  # and sufficient for all MVP routes. CORS is left restrictive — tighten
+  # AllowOrigins to your actual front-end domain before going to production.
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Env
+      # Access logging to CloudWatch — useful for debugging 4xx/5xx from the
+      # gateway itself (distinct from Lambda-level errors).
+      AccessLogSettings:
+        DestinationArn: !GetAtt HttpApiLogGroup.Arn
+        Format: >-
+          {"requestId":"$context.requestId","ip":"$context.identity.sourceIp",
+           "requestTime":"$context.requestTime","httpMethod":"$context.httpMethod",
+           "routeKey":"$context.routeKey","status":"$context.status",
+           "protocol":"$context.protocol","responseLength":"$context.responseLength",
+           "integrationError":"$context.integrationErrorMessage"}
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - Stripe-Signature
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+
+  # Access log group for the HTTP API Gateway stage.
+  HttpApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/apigateway/zip02-${Env}"
+      RetentionInDays: !Ref LogRetentionDays
+
+  # ── EventBridge: no-show reconciliation schedule ───────────────────────────
+  # Fires every hour so that events that ended in the last hour are reconciled
+  # promptly. The reconciliation endpoint is idempotent — running it multiple
+  # times for the same event is safe because InMemoryRefundProcessor (and the
+  # future DynamoDB-backed equivalent) only refunds tickets that are still in
+  # Paid state and never checked in.
+  #
+  # The SAM Schedule event synthesises an HTTP API Gateway v2 payload and
+  # invokes the Lambda asynchronously. Failures land in the DLQ.
+  #
+  # For the MVP, the schedule POSTs to a dedicated reconciliation route that
+  # the RefundsController handles. The event-id wildcard is replaced at runtime
+  # by the controller iterating over all ended events.
+  ReconciliationScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "zip02-${Env}-reconcile-schedule"
+      Description: >
+        Hourly trigger that calls the no-show reconciliation endpoint so that
+        paid tickets for ended events are refunded automatically.
+      # Every hour on the hour — adjust cadence for prod if tighter SLAs are needed.
+      ScheduleExpression: "rate(1 hour)"
+      State: ENABLED
+      Targets:
+        - Id: ReconcileTarget
+          Arn: !GetAtt ApiFunction.Arn
+          # Synthesise an HTTP API Gateway v2 proxy event so ASP.NET Core routing
+          # resolves to POST /refunds/reconcile (a dedicated batch-reconcile route
+          # added in step 8 of the milestone sequence).
+          Input: >-
+            {
+              "version": "2.0",
+              "routeKey": "POST /refunds/reconcile",
+              "rawPath": "/refunds/reconcile",
+              "rawQueryString": "",
+              "headers": {
+                "content-type": "application/json",
+                "x-invocation-source": "eventbridge-schedule"
+              },
+              "requestContext": {
+                "http": {
+                  "method": "POST",
+                  "path": "/refunds/reconcile",
+                  "protocol": "HTTP/1.1",
+                  "sourceIp": "127.0.0.1",
+                  "userAgent": "EventBridge/1.0"
+                },
+                "stage": "$default"
+              },
+              "body": "{}",
+              "isBase64Encoded": false
+            }
+          # Route failed EventBridge invocations to the same SQS DLQ.
+          DeadLetterConfig:
+            Arn: !GetAtt LambdaDeadLetterQueue.Arn
+          # Retry up to 2 times before sending to the DLQ (default is 185 attempts
+          # over 24 h — far too aggressive for a reconciliation job).
+          RetryPolicy:
+            MaximumRetryAttempts: 2
+            MaximumEventAgeInSeconds: 3600
+
+  # Grant EventBridge permission to invoke the Lambda function.
+  ReconciliationSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt ApiFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ReconciliationScheduleRule.Arn
+
+# ── Outputs ───────────────────────────────────────────────────────────────────
+# Exported values are used by the deploy script and can be referenced from
+# other stacks (e.g. a future front-end stack that needs the API URL).
+Outputs:
+
+  ApiUrl:
+    Description: Base URL of the HTTP API Gateway endpoint.
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Env}"
+    Export:
+      Name: !Sub "zip02-${Env}-ApiUrl"
+
+  FunctionArn:
+    Description: ARN of the main Lambda function.
+    Value: !GetAtt ApiFunction.Arn
+    Export:
+      Name: !Sub "zip02-${Env}-FunctionArn"
+
+  TableArn:
+    Description: ARN of the DynamoDB tickets table.
+    Value: !GetAtt TicketsTable.Arn
+    Export:
+      Name: !Sub "zip02-${Env}-TableArn"
+
+  DlqUrl:
+    Description: URL of the SQS dead-letter queue.
+    Value: !Ref LambdaDeadLetterQueue
+    Export:
+      Name: !Sub "zip02-${Env}-DlqUrl"

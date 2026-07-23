@@ -1,0 +1,9 @@
+[
+  { "ParameterKey": "Env",                        "ParameterValue": "dev" },
+  { "ParameterKey": "TableName",                   "ParameterValue": "zip02-tickets-dev" },
+  { "ParameterKey": "StripeWebhookSecretSsmPath",   "ParameterValue": "/zip02/dev/stripe/webhook-secret" },
+  { "ParameterKey": "BillingMode",                 "ParameterValue": "PAY_PER_REQUEST" },
+  { "ParameterKey": "LambdaMemoryMb",              "ParameterValue": "512" },
+  { "ParameterKey": "LambdaTimeoutSeconds",         "ParameterValue": "29" },
+  { "ParameterKey": "LogRetentionDays",             "ParameterValue": "7" }
+]

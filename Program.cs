@@ -50,6 +50,12 @@ builder.Services.AddSingleton<IRefundProcessor, InMemoryRefundProcessor>();
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
+// AddAWSLambdaHosting is a no-op when the app runs outside Lambda (local dev,
+// unit tests) so it is safe to call unconditionally. Inside Lambda it swaps
+// the Kestrel server for the Lambda ASP.NET Core server adapter, translating
+// HTTP API Gateway v2 proxy events into HttpContext objects.
+builder.Services.AddAWSLambdaHosting(LambdaEventSource.HttpApi);
+
 var app = builder.Build();
 
 // ── Middleware pipeline ───────────────────────────────────────────────────────
