@@ -1,7 +1,9 @@
 using Amazon.DynamoDBv2;
 using Amazon.Extensions.NETCore.Setup;
 using zip02.Services.Events;
+using zip02.Services.Events.DynamoDB;
 using zip02.Services.Notifications.InMemory;
+using zip02.Services.Payments.DynamoDB;
 using zip02.Services.Payments.InMemory;
 using zip02.Services.Refunds.Infrastructure;
 using zip02.Services.Ticketing.DynamoDB;
@@ -27,22 +29,26 @@ if (!string.IsNullOrWhiteSpace(dynamoTableName))
     // underlying HTTP connection pool across requests.
     var awsOptions = builder.Configuration.GetAWSOptions();
     builder.Services.AddSingleton<IAmazonDynamoDB>(_ => awsOptions.CreateServiceClient<IAmazonDynamoDB>());
+
+    // DynamoDB-backed stores for persistent event, ticket, and payment data.
+    builder.Services.AddSingleton<IEventStore>(sp =>
+        new DynamoDbEventStore(sp.GetRequiredService<IAmazonDynamoDB>(), dynamoTableName));
     builder.Services.AddSingleton<ITicketStore>(sp =>
         new DynamoDbTicketStore(sp.GetRequiredService<IAmazonDynamoDB>(), dynamoTableName));
+    builder.Services.AddSingleton<IPaymentStore>(sp =>
+        new DynamoDbPaymentStore(sp.GetRequiredService<IAmazonDynamoDB>(), dynamoTableName));
 }
 else
 {
-    // In-memory store: zero external dependencies, data lives only for the
+    // In-memory stores: zero external dependencies, data lives only for the
     // lifetime of the process.
+    builder.Services.AddSingleton<IEventStore, InMemoryEventStore>();
     builder.Services.AddSingleton<ITicketStore, InMemoryTicketStore>();
+    builder.Services.AddSingleton<IPaymentStore, InMemoryPaymentStore>();
 }
 
-// ── Persistence: Events, Payments, Notifications, Refunds ────────────────────
-// These services use in-memory stores for the MVP.
-// Each will be replaced with its DynamoDB counterpart in a future step once the
-// single-table schema is extended to cover them.
-builder.Services.AddSingleton<IEventStore, InMemoryEventStore>();
-builder.Services.AddSingleton<IPaymentStore, InMemoryPaymentStore>();
+// ── Persistence: Notifications, Refunds ──────────────────────────────────────
+// These services remain in-memory for now and will move to DynamoDB later.
 builder.Services.AddSingleton<INotificationStore, InMemoryNotificationStore>();
 builder.Services.AddSingleton<IRefundProcessor, InMemoryRefundProcessor>();
 
