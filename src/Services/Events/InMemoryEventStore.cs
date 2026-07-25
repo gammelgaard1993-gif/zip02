@@ -9,6 +9,8 @@ public interface IEventStore
     EventResponse? Get(Guid id);
 
     EventResponse? Update(Guid id, UpdateEventRequest request);
+
+    IReadOnlyCollection<EventResponse> GetEndedEvents(DateTimeOffset processedAtUtc);
 }
 
 public sealed class InMemoryEventStore : IEventStore
@@ -72,5 +74,12 @@ public sealed class InMemoryEventStore : IEventStore
                 return updated;
             }
         }
+    }
+
+    public IReadOnlyCollection<EventResponse> GetEndedEvents(DateTimeOffset processedAtUtc)
+    {
+        return _events.Values
+            .Where(e => e.EndAtUtc <= processedAtUtc)
+            .ToArray();
     }
 }

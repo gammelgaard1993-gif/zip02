@@ -49,3 +49,16 @@ public sealed class NoShowReconciliationResult
 
     public IReadOnlyCollection<RefundTicketResult> Tickets { get; init; } = Array.Empty<RefundTicketResult>();
 }
+
+public sealed class BatchNoShowReconciliationResult
+{
+    public DateTimeOffset ProcessedAtUtc { get; init; }
+
+    public int EventCount { get; init; }
+
+    public int EvaluatedTicketCount { get; init; }
+
+    public int RefundedTicketCount { get; init; }
+
+    public IReadOnlyCollection<NoShowReconciliationResult> Events { get; init; } = Array.Empty<NoShowReconciliationResult>();
+}

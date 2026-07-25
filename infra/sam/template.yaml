@@ -434,9 +434,78 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/aws/apigateway/zip02-${Env}"
-      RetentionInDays: !Ref LogRetentionDays
+          RetentionInDays: !Ref LogRetentionDays
 
-  # ── EventBridge: no-show reconciliation schedule ───────────────────────────
+      # ── Cognito: User Pool + Organizer Groups ──────────────────────────────────────────────
+      # SECURITY: Defines organizer identity for JWT validation.
+      CognitoUserPool:
+        Type: AWS::Cognito::UserPool
+        Properties:
+          UserPoolName: !Sub "zip02-organizers-${Env}"
+          Policies:
+            PasswordPolicy:
+              MinimumLength: 12
+              RequireUppercase: true
+              RequireLowercase: true
+              RequireNumbers: true
+              RequireSymbols: true
+          Schema:
+            - Name: email
+              AttributeDataType: String
+              Required: true
+              Mutable: true
+            - Name: name
+              AttributeDataType: String
+              Required: true
+              Mutable: true
+          MfaConfiguration: !If [IsProd, OPTIONAL, OFF]
+          DeletionProtection: !If [IsProd, ENABLED, DISABLED]
+          Tags:
+            - Key: Environment
+              Value: !Ref Env
+            - Key: Service
+              Value: zip02
+
+      CognitoAppClient:
+        Type: AWS::Cognito::UserPoolClient
+        Properties:
+          ClientName: !Sub "zip02-api-${Env}"
+          UserPoolId: !Ref CognitoUserPool
+          AllowedOAuthScopes:
+            - openid
+            - profile
+            - email
+          AllowedOAuthFlows:
+            - code
+          GenerateSecret: true
+          ExplicitAuthFlows:
+            - ALLOW_CLIENT_CREDENTIALS_AUTH
+            - ALLOW_REFRESH_TOKEN_AUTH
+          PreventUserExistenceErrors: ENABLED
+
+      CognitoUserPoolDomain:
+        Type: AWS::Cognito::UserPoolDomain
+        Properties:
+          Domain: !Sub "zip02-${Env}-${AWS::AccountId}"
+          UserPoolId: !Ref CognitoUserPool
+
+      OrganizerAdminGroup:
+        Type: AWS::Cognito::UserPoolGroup
+        Properties:
+          GroupName: organizer-admin
+          Description: Full access to organizer management and reconciliation endpoints
+          UserPoolId: !Ref CognitoUserPool
+          Precedence: 10
+
+      OrganizerOperatorGroup:
+        Type: AWS::Cognito::UserPoolGroup
+        Properties:
+          GroupName: organizer-operator
+          Description: Limited organizer access (read-only for sensitive operations)
+          UserPoolId: !Ref CognitoUserPool
+          Precedence: 20
+
+      # ── EventBridge
   # Fires every hour so that events that ended in the last hour are reconciled
   # promptly. The reconciliation endpoint is idempotent — running it multiple
   # times for the same event is safe because InMemoryRefundProcessor (and the
@@ -446,9 +515,8 @@ Resources:
   # The SAM Schedule event synthesises an HTTP API Gateway v2 payload and
   # invokes the Lambda asynchronously. Failures land in the DLQ.
   #
-  # For the MVP, the schedule POSTs to a dedicated reconciliation route that
-  # the RefundsController handles. The event-id wildcard is replaced at runtime
-  # by the controller iterating over all ended events.
+  # For the MVP, the schedule POSTs to a dedicated batch reconciliation route
+  # that processes all ended events in one invocation.
   ReconciliationScheduleRule:
     Type: AWS::Events::Rule
     Properties:
@@ -463,13 +531,12 @@ Resources:
         - Id: ReconcileTarget
           Arn: !GetAtt ApiFunction.Arn
           # Synthesise an HTTP API Gateway v2 proxy event so ASP.NET Core routing
-          # resolves to POST /refunds/reconcile (a dedicated batch-reconcile route
-          # added in step 8 of the milestone sequence).
+          # resolves to POST /refunds/reconcile-ended-events.
           Input: >-
             {
               "version": "2.0",
-              "routeKey": "POST /refunds/reconcile",
-              "rawPath": "/refunds/reconcile",
+              "routeKey": "POST /refunds/reconcile-ended-events",
+              "rawPath": "/refunds/reconcile-ended-events",
               "rawQueryString": "",
               "headers": {
                 "content-type": "application/json",
@@ -479,7 +546,7 @@ Resources:
               "requestContext": {
                 "http": {
                   "method": "POST",
-                  "path": "/refunds/reconcile",
+                  "path": "/refunds/reconcile-ended-events",
                   "protocol": "HTTP/1.1",
                   "sourceIp": "127.0.0.1",
                   "userAgent": "EventBridge/1.0"
@@ -492,8 +559,9 @@ Resources:
           # Route failed EventBridge invocations to the same SQS DLQ.
           DeadLetterConfig:
             Arn: !GetAtt LambdaDeadLetterQueue.Arn
-          # Retry up to 2 times before sending to the DLQ (default is 185 attempts
-          # over 24 h — far too aggressive for a reconciliation job).
+          # Retry policy deliberately capped for financial workflows:
+          #   - 2 retries total keeps transient resilience
+          #   - 1h max event age avoids stale reconciliation decisions
           RetryPolicy:
             MaximumRetryAttempts: 2
             MaximumEventAgeInSeconds: 3600
@@ -546,6 +614,10 @@ Resources:
             }
           DeadLetterConfig:
             Arn: !GetAtt LambdaDeadLetterQueue.Arn
+          # Retry policy tuned for fast-capacity recovery:
+          #   - 2 retries for transient failures
+          #   - 30m max event age prevents delayed expiry actions from creating
+          #     confusing operational lag during live check-in windows
           RetryPolicy:
             MaximumRetryAttempts: 2
             MaximumEventAgeInSeconds: 1800
@@ -595,3 +667,27 @@ Outputs:
     Value: !Ref LambdaDeadLetterQueue
     Export:
       Name: !Sub "zip02-${Env}-DlqUrl"
+
+  CognitoUserPoolId:
+    Description: Cognito User Pool ID for organizer authentication.
+    Value: !Ref CognitoUserPool
+    Export:
+      Name: !Sub "zip02-${Env}-CognitoUserPoolId"
+
+  CognitoAppClientId:
+    Description: Cognito App Client ID (audience for JWT validation).
+    Value: !Ref CognitoAppClient
+    Export:
+      Name: !Sub "zip02-${Env}-CognitoAppClientId"
+
+  CognitoUserPoolArn:
+    Description: ARN of the Cognito User Pool.
+    Value: !GetAtt CognitoUserPool.Arn
+    Export:
+      Name: !Sub "zip02-${Env}-CognitoUserPoolArn"
+
+  CognitoOAuthDomain:
+    Description: Cognito OAuth2 domain for token endpoints.
+    Value: !Sub "https://${CognitoUserPoolDomain}.auth.${AWS::Region}.amazoncognito.com"
+    Export:
+      Name: !Sub "zip02-${Env}-CognitoOAuthDomain"

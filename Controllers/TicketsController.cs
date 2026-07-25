@@ -8,7 +8,7 @@ namespace zip02.Controllers;
 
 [ApiController]
 [Route("tickets")]
-public class TicketsController(ITicketStore ticketStore, IEventStore eventStore) : ControllerBase
+public class TicketsController(ITicketStore ticketStore, IEventStore eventStore, ILogger<TicketsController> logger) : ControllerBase
 {
     private static readonly TimeSpan ReservationTtl = TimeSpan.FromMinutes(15);
 
@@ -55,7 +55,20 @@ public class TicketsController(ITicketStore ticketStore, IEventStore eventStore)
     public ActionResult<ExpireReservationsResponse> ExpireReservations([FromBody] ExpireReservationsRequest? request)
     {
         var processedAtUtc = request?.ProcessedAtUtc ?? DateTimeOffset.UtcNow;
+
+        // OPERATIONAL LOGGING: Explicitly record scheduler/admin expiry runs so
+        // CloudWatch queries can track job cadence, throughput, and anomalies.
+        logger.LogInformation(
+            "Ticket expiry run started at {ProcessedAtUtc} (invocationSource={InvocationSource})",
+            processedAtUtc,
+            Request.Headers["x-invocation-source"].ToString());
+
         var expired = ticketStore.ExpireReservations(processedAtUtc);
+
+        logger.LogInformation(
+            "Ticket expiry run completed at {ProcessedAtUtc}; expiredCount={ExpiredCount}",
+            processedAtUtc,
+            expired.Count);
 
         return Ok(new ExpireReservationsResponse
         {

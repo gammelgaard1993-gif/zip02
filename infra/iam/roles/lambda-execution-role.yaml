@@ -1,0 +1,246 @@
+# Lambda Execution Role for zip02 API
+# 
+# PURPOSE:
+#   Defines the IAM role and policies for the Lambda function executing the zip02 API.
+#   Follows the principle of least privilege: grants only permissions necessary for MVP operations.
+#
+# PERMISSIONS GRANTED:
+#   - CloudWatch Logs: write application and error logs
+#   - DynamoDB: read/write to single-table schema (events, tickets, payments, notifications)
+#   - DynamoDB Streams: read TTL expiration events (future phase)
+#   - EventBridge: receive scheduled triggers for reconciliation tasks
+#   - SNS: publish events to topics (for future integration)
+#   - SES/Email: send transactional emails (QR delivery, refund notifications)
+#   - Secrets Manager: read Cognito config, Stripe webhook secret, internal scheduler token
+#   - X-Ray: optional tracing (future phase)
+#
+# SCOPING:
+#   - DynamoDB actions limited to api-resources table only (via condition)
+#   - EventBridge invoke only from scheduled rules (source validation)
+#   - SES limited to send-only, not full admin
+#   - No S3, no RDS, no cross-account access
+
+Resources:
+  # ============================================================================
+  # IAM ROLE: Lambda Execution Role
+  # ============================================================================
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'zip02-lambda-execution-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Description: 'Execution role for zip02 API Lambda function with least-privilege permissions'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Service
+          Value: zip02
+        - Key: ManagedBy
+          Value: SAM
+
+  # ============================================================================
+  # POLICY: CloudWatch Logs (write application + error logs)
+  # ============================================================================
+  CloudWatchLogsPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: zip02-cloudwatch-logs-policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CreateAndWriteLogGroups
+            Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/zip02*'
+      Roles:
+        - !Ref LambdaExecutionRole
+
+  # ============================================================================
+  # POLICY: DynamoDB (single-table read/write for all entities)
+  # ============================================================================
+  DynamoDbPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: zip02-dynamodb-policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DynamoDbTableOperations
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:Query
+              - dynamodb:Scan
+            Resource: !GetAtt ApiResourcesTable.Arn
+            Condition:
+              StringEquals:
+                'aws:RequestedRegion': !Ref AWS::Region
+          - Sid: DynamoDbGlobalSecondaryIndexes
+            Effect: Allow
+            Action:
+              - dynamodb:Query
+            Resource: !Sub '${ApiResourcesTable.Arn}/index/*'
+            Condition:
+              StringEquals:
+                'aws:RequestedRegion': !Ref AWS::Region
+          - Sid: DynamoDbStreamRead
+            Effect: Allow
+            Action:
+              - dynamodb:GetRecords
+              - dynamodb:GetShardIterator
+              - dynamodb:DescribeStream
+              - dynamodb:ListStreams
+            Resource: !Sub '${ApiResourcesTable.Arn}/stream/*'
+      Roles:
+        - !Ref LambdaExecutionRole
+
+  # ============================================================================
+  # POLICY: EventBridge (receive scheduled reconciliation triggers)
+  # ============================================================================
+  EventBridgePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: zip02-eventbridge-policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowEventBridgeInvoke
+            Effect: Allow
+            Action:
+              - events:PutEvents
+            Resource: !GetAtt EventBusArn
+            Condition:
+              StringEquals:
+                'events:detail-type': 'Scheduled Event'
+      Roles:
+        - !Ref LambdaExecutionRole
+
+  # ============================================================================
+  # POLICY: SNS (publish to topics for event notifications)
+  # ============================================================================
+  SnsPublishPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: zip02-sns-publish-policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PublishToSnsTopics
+            Effect: Allow
+            Action:
+              - sns:Publish
+            Resource: !Sub 'arn:aws:sns:${AWS::Region}:${AWS::AccountId}:zip02-*'
+      Roles:
+        - !Ref LambdaExecutionRole
+
+  # ============================================================================
+  # POLICY: SES (send transactional emails for QR + notifications)
+  # ============================================================================
+  SesEmailPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: zip02-ses-email-policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: SendEmail
+            Effect: Allow
+            Action:
+              - ses:SendEmail
+              - ses:SendRawEmail
+            Resource: !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/*'
+            Condition:
+              StringLike:
+                'ses:FromAddress':
+                  - 'noreply@zip02.app'
+                  - 'support@zip02.app'
+      Roles:
+        - !Ref LambdaExecutionRole
+
+  # ============================================================================
+  # POLICY: Secrets Manager (read configuration secrets)
+  # ============================================================================
+  SecretsManagerPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: zip02-secrets-manager-policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ReadSecrets
+            Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:zip02/*'
+            Condition:
+              StringEquals:
+                'secretsmanager:VersionStage': AWSCURRENT
+      Roles:
+        - !Ref LambdaExecutionRole
+
+  # ============================================================================
+  # POLICY: X-Ray (optional: distributed tracing)
+  # ============================================================================
+  XRayWritePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: zip02-xray-write-policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: WriteTraceSegments
+            Effect: Allow
+            Action:
+              - xray:PutTraceSegments
+              - xray:PutTelemetryRecords
+            Resource: '*'
+      Roles:
+        - !Ref LambdaExecutionRole
+
+  # ============================================================================
+  # POLICY: CloudWatch Metrics (custom metrics for business events)
+  # ============================================================================
+  CloudWatchMetricsPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: zip02-cloudwatch-metrics-policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PutCustomMetrics
+            Effect: Allow
+            Action:
+              - cloudwatch:PutMetricData
+            Resource: '*'
+            Condition:
+              StringEquals:
+                'cloudwatch:namespace': zip02
+      Roles:
+        - !Ref LambdaExecutionRole
+
+# ============================================================================
+# OUTPUTS
+# ============================================================================
+Outputs:
+  LambdaExecutionRoleArn:
+    Description: ARN of the Lambda execution role
+    Value: !GetAtt LambdaExecutionRole.Arn
+    Export:
+      Name: !Sub 'zip02-lambda-execution-role-arn-${Environment}'
+
+  LambdaExecutionRoleName:
+    Description: Name of the Lambda execution role
+    Value: !Ref LambdaExecutionRole
+    Export:
+      Name: !Sub 'zip02-lambda-execution-role-name-${Environment}'

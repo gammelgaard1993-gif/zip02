@@ -1,0 +1,38 @@
+# API Gateway → Lambda Invocation Policy
+#
+# PURPOSE:
+#   Allows HTTP API Gateway to invoke the zip02 Lambda function.
+#   This is the resource-based policy attached to the Lambda function itself.
+#
+# SECURITY:
+#   - Restricts invoke to only the API Gateway service
+#   - Scoped to specific API Gateway ARN
+#   - Prevents cross-account callers
+
+Resources:
+  # ============================================================================
+  # RESOURCE POLICY: Lambda invocation by API Gateway
+  # ============================================================================
+  LambdaApiGatewayInvokePolicy:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ApiFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*'
+
+  # ============================================================================
+  # RESOURCE POLICY: EventBridge → Lambda for scheduled reconciliation
+  # ============================================================================
+  LambdaEventBridgeInvokePolicy:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ApiFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ReconciliationScheduleRule.Arn
+
+# NOTE:
+#   - ApiFunction must be defined elsewhere in template
+#   - HttpApi must be defined elsewhere in template
+#   - ReconciliationScheduleRule must be defined elsewhere in template

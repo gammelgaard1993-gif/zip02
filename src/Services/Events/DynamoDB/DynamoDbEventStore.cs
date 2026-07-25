@@ -114,6 +114,24 @@ public sealed class DynamoDbEventStore(IAmazonDynamoDB dynamoDb, string tableNam
         }
     }
 
+    public IReadOnlyCollection<EventResponse> GetEndedEvents(DateTimeOffset processedAtUtc)
+    {
+        var response = dynamoDb.ScanAsync(new ScanRequest
+        {
+            TableName = tableName,
+            FilterExpression = "SK = :eventSk AND EndAtUtc <= :processedAtUtc",
+            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+            {
+                [":eventSk"] = new AttributeValue(SkValue),
+                [":processedAtUtc"] = new AttributeValue(processedAtUtc.ToString("O"))
+            }
+        }).GetAwaiter().GetResult();
+
+        return response.Items
+            .Select(FromItem)
+            .ToArray();
+    }
+
     private static Dictionary<string, AttributeValue> Key(Guid id) => new()
     {
         [Pk] = new AttributeValue(EventPk(id)),
