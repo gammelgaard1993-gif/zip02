@@ -1,9 +1,14 @@
 [
-  { "ParameterKey": "Env",                        "ParameterValue": "test" },
-  { "ParameterKey": "TableName",                   "ParameterValue": "zip02-tickets-test" },
-  { "ParameterKey": "StripeWebhookSecretSsmPath",   "ParameterValue": "/zip02/test/stripe/webhook-secret" },
-  { "ParameterKey": "BillingMode",                 "ParameterValue": "PAY_PER_REQUEST" },
-  { "ParameterKey": "LambdaMemoryMb",              "ParameterValue": "512" },
-  { "ParameterKey": "LambdaTimeoutSeconds",         "ParameterValue": "29" },
-  { "ParameterKey": "LogRetentionDays",             "ParameterValue": "14" }
+  { "ParameterKey": "Env",                           "ParameterValue": "test" },
+  { "ParameterKey": "TableName",                      "ParameterValue": "zip02-tickets-test" },
+  { "ParameterKey": "StripeWebhookSecretSsmPath",      "ParameterValue": "/zip02/test/stripe/webhook-secret" },
+  { "ParameterKey": "InternalSchedulerTokenSsmPath",   "ParameterValue": "/zip02/test/internal/scheduler-token" },
+  { "ParameterKey": "CognitoRegion",                  "ParameterValue": "" },
+  { "ParameterKey": "CognitoUserPoolId",              "ParameterValue": "" },
+  { "ParameterKey": "CognitoClientId",                "ParameterValue": "" },
+  { "ParameterKey": "CognitoOrganizerGroups",         "ParameterValue": "organizer-admin,organizer-operator" },
+  { "ParameterKey": "BillingMode",                    "ParameterValue": "PAY_PER_REQUEST" },
+  { "ParameterKey": "LambdaMemoryMb",                 "ParameterValue": "512" },
+  { "ParameterKey": "LambdaTimeoutSeconds",            "ParameterValue": "29" },
+  { "ParameterKey": "LogRetentionDays",                "ParameterValue": "14" }
 ]

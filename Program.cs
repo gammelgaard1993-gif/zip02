@@ -1,5 +1,7 @@
 using Amazon.DynamoDBv2;
 using Amazon.Extensions.NETCore.Setup;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 using zip02.Services.Events;
 using zip02.Services.Events.DynamoDB;
 using zip02.Services.Notifications.InMemory;
@@ -52,6 +54,125 @@ else
 builder.Services.AddSingleton<INotificationStore, InMemoryNotificationStore>();
 builder.Services.AddSingleton<IRefundProcessor, InMemoryRefundProcessor>();
 
+// ── Security: Organizer authentication + authorization (Cognito JWT) ─────────
+// WHY:
+//   Organizer routes mutate business-critical state (event configuration,
+//   refunds, and operational reconciliation). These routes must be protected by
+//   strong identity, not by anonymous/public access.
+//
+// HOW:
+//   1) If Cognito settings are configured, enable JWT bearer validation.
+//      - validates token issuer/audience/lifetime/signature via Cognito JWKS.
+//   2) Enforce OrganizerWrite policy that requires authenticated users in one
+//      of the approved Cognito groups (default: organizer-admin/organizer-operator).
+//
+// SAFE LOCAL DEV:
+//   If Cognito settings are absent, OrganizerWrite becomes pass-through so
+//   existing local tests and dev workflows continue to run unchanged.
+var cognitoRegion = builder.Configuration["Security:Cognito:Region"];
+var cognitoUserPoolId = builder.Configuration["Security:Cognito:UserPoolId"];
+var cognitoClientId = builder.Configuration["Security:Cognito:ClientId"];
+var organizerGroupsRaw = builder.Configuration["Security:Cognito:OrganizerGroups"]
+    ?? "organizer-admin,organizer-operator";
+var organizerGroups = organizerGroupsRaw
+    .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+// SECURITY: Shared secret used only for machine-to-machine EventBridge triggers
+// (expiry + reconciliation). This allows scheduled operational workflows to run
+// without a human JWT while still preventing anonymous callers from invoking
+// privileged endpoints by spoofing only the source header.
+var internalSchedulerToken = builder.Configuration["Security:InternalSchedulerToken"];
+
+var cognitoAuthEnabled =
+    !string.IsNullOrWhiteSpace(cognitoRegion) &&
+    !string.IsNullOrWhiteSpace(cognitoUserPoolId) &&
+    !string.IsNullOrWhiteSpace(cognitoClientId);
+
+if (cognitoAuthEnabled)
+{
+    var authority = $"https://cognito-idp.{cognitoRegion}.amazonaws.com/{cognitoUserPoolId}";
+
+    builder.Services
+        .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.Authority = authority;
+            options.Audience = cognitoClientId;
+            options.RequireHttpsMetadata = true;
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = authority,
+                ValidateAudience = true,
+                ValidAudience = cognitoClientId,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                NameClaimType = "cognito:username"
+            };
+        });
+}
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("OrganizerWrite", policy =>
+    {
+        if (!cognitoAuthEnabled)
+        {
+            // Local/dev fallback: no Cognito settings configured, so do not block
+            // existing integration tests and local workflows.
+            policy.RequireAssertion(_ => true);
+            return;
+        }
+
+        policy.RequireAssertion(ctx =>
+        {
+            // SECURITY: Allow trusted machine invocations from EventBridge only
+            // when BOTH the invocation-source marker and a secret token match.
+            // This protects scheduled admin workflows (expiry/reconcile) without
+            // weakening human organizer RBAC.
+            if (IsTrustedSchedulerCall(ctx, internalSchedulerToken))
+            {
+                return true;
+            }
+
+            if (!(ctx.User?.Identity?.IsAuthenticated ?? false))
+            {
+                return false;
+            }
+
+            var groups = ctx.User.FindAll("cognito:groups").Select(c => c.Value);
+            return groups.Any(group => organizerGroups.Contains(group));
+        });
+    });
+});
+
+static bool IsTrustedSchedulerCall(Microsoft.AspNetCore.Authorization.AuthorizationHandlerContext ctx, string? expectedToken)
+{
+    if (string.IsNullOrWhiteSpace(expectedToken))
+    {
+        return false;
+    }
+
+    var httpContext = ctx.Resource switch
+    {
+        HttpContext direct => direct,
+        Microsoft.AspNetCore.Mvc.Filters.AuthorizationFilterContext mvc => mvc.HttpContext,
+        _ => null
+    };
+
+    if (httpContext is null)
+    {
+        return false;
+    }
+
+    var sourceHeader = httpContext.Request.Headers["x-invocation-source"].ToString();
+    var tokenHeader = httpContext.Request.Headers["x-internal-auth"].ToString();
+
+    return string.Equals(sourceHeader, "eventbridge-schedule", StringComparison.Ordinal) &&
+           string.Equals(tokenHeader, expectedToken, StringComparison.Ordinal);
+}
+
 // ── API layer ─────────────────────────────────────────────────────────────────
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
@@ -72,6 +193,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+if (cognitoAuthEnabled)
+{
+    app.UseAuthentication();
+}
+
 app.UseAuthorization();
 app.MapControllers();
 

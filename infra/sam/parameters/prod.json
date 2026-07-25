@@ -1,9 +1,14 @@
 [
-  { "ParameterKey": "Env",                        "ParameterValue": "prod" },
-  { "ParameterKey": "TableName",                   "ParameterValue": "zip02-tickets" },
-  { "ParameterKey": "StripeWebhookSecretSsmPath",   "ParameterValue": "/zip02/prod/stripe/webhook-secret" },
-  { "ParameterKey": "BillingMode",                 "ParameterValue": "PAY_PER_REQUEST" },
-  { "ParameterKey": "LambdaMemoryMb",              "ParameterValue": "1024" },
-  { "ParameterKey": "LambdaTimeoutSeconds",         "ParameterValue": "29" },
-  { "ParameterKey": "LogRetentionDays",             "ParameterValue": "90" }
+  { "ParameterKey": "Env",                           "ParameterValue": "prod" },
+  { "ParameterKey": "TableName",                      "ParameterValue": "zip02-tickets" },
+  { "ParameterKey": "StripeWebhookSecretSsmPath",      "ParameterValue": "/zip02/prod/stripe/webhook-secret" },
+  { "ParameterKey": "InternalSchedulerTokenSsmPath",   "ParameterValue": "/zip02/prod/internal/scheduler-token" },
+  { "ParameterKey": "CognitoRegion",                  "ParameterValue": "eu-west-1" },
+  { "ParameterKey": "CognitoUserPoolId",              "ParameterValue": "REPLACE_ME_USER_POOL_ID" },
+  { "ParameterKey": "CognitoClientId",                "ParameterValue": "REPLACE_ME_CLIENT_ID" },
+  { "ParameterKey": "CognitoOrganizerGroups",         "ParameterValue": "organizer-admin,organizer-operator" },
+  { "ParameterKey": "BillingMode",                    "ParameterValue": "PAY_PER_REQUEST" },
+  { "ParameterKey": "LambdaMemoryMb",                 "ParameterValue": "1024" },
+  { "ParameterKey": "LambdaTimeoutSeconds",            "ParameterValue": "29" },
+  { "ParameterKey": "LogRetentionDays",                "ParameterValue": "90" }
 ]

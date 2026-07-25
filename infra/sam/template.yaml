@@ -27,6 +27,33 @@ Parameters:
     Default: /zip02/dev/stripe/webhook-secret
     Description: SSM Parameter Store path that holds the Stripe webhook signing secret.
 
+  InternalSchedulerTokenSsmPath:
+    Type: AWS::SSM::Parameter::Name
+    Default: /zip02/dev/internal/scheduler-token
+    Description: >
+      SSM Parameter path for the shared secret used by EventBridge machine
+      invocations to call privileged organizer endpoints safely.
+
+  CognitoRegion:
+    Type: String
+    Default: ""
+    Description: Cognito region for JWT issuer validation. Leave empty to disable JWT auth.
+
+  CognitoUserPoolId:
+    Type: String
+    Default: ""
+    Description: Cognito User Pool ID for organizer authentication.
+
+  CognitoClientId:
+    Type: String
+    Default: ""
+    Description: Cognito App Client ID (audience) accepted by organizer JWT validation.
+
+  CognitoOrganizerGroups:
+    Type: String
+    Default: organizer-admin,organizer-operator
+    Description: Comma-separated Cognito groups allowed to call organizer write endpoints.
+
   BillingMode:
     Type: String
     Default: PAY_PER_REQUEST
@@ -86,6 +113,15 @@ Globals:
         DynamoDB__TableName: !Ref TableName
         # AWS SDK region — picked up by AWSSDK.Extensions.NETCore.Setup.
         AWS__Region: !Sub "${AWS::Region}"
+        # SECURITY: Cognito settings drive JWT auth enablement in Program.cs.
+        # If any are blank, Cognito auth is disabled (safe local fallback).
+        Security__Cognito__Region: !Ref CognitoRegion
+        Security__Cognito__UserPoolId: !Ref CognitoUserPoolId
+        Security__Cognito__ClientId: !Ref CognitoClientId
+        Security__Cognito__OrganizerGroups: !Ref CognitoOrganizerGroups
+        # SECURITY: Shared secret used by EventBridge machine invocations for
+        # scheduled organizer workflows (expiry + reconciliation).
+        Security__InternalSchedulerToken: !Sub "{{resolve:ssm:${InternalSchedulerTokenSsmPath}}}"
 
 # ── Resources ─────────────────────────────────────────────────────────────────
 Resources:
@@ -437,7 +473,8 @@ Resources:
               "rawQueryString": "",
               "headers": {
                 "content-type": "application/json",
-                "x-invocation-source": "eventbridge-schedule"
+                "x-invocation-source": "eventbridge-schedule",
+                "x-internal-auth": "{{resolve:ssm:${InternalSchedulerTokenSsmPath}}}"
               },
               "requestContext": {
                 "http": {
@@ -461,6 +498,58 @@ Resources:
             MaximumRetryAttempts: 2
             MaximumEventAgeInSeconds: 3600
 
+  # ── EventBridge: reservation expiry schedule ───────────────────────────────
+  # SECURITY: This automation performs privileged bulk state mutation
+  # (reserved -> expired), so it must authenticate as a trusted machine caller,
+  # not as an anonymous public request.
+  #
+  # HOW:
+  #   - EventBridge injects x-invocation-source=eventbridge-schedule
+  #   - EventBridge injects x-internal-auth=<shared secret from SSM>
+  #   - Program.cs OrganizerWrite policy validates BOTH headers before allowing
+  #     machine access to organizer-protected endpoints.
+  ReservationExpiryScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "zip02-${Env}-expiry-schedule"
+      Description: >
+        Runs reservation expiry every 5 minutes so stale reserved tickets are
+        released quickly and capacity becomes available.
+      ScheduleExpression: "rate(5 minutes)"
+      State: ENABLED
+      Targets:
+        - Id: ExpiryTarget
+          Arn: !GetAtt ApiFunction.Arn
+          Input: !Sub |
+            {
+              "version": "2.0",
+              "routeKey": "POST /tickets/expire-reservations",
+              "rawPath": "/tickets/expire-reservations",
+              "rawQueryString": "",
+              "headers": {
+                "content-type": "application/json",
+                "x-invocation-source": "eventbridge-schedule",
+                "x-internal-auth": "{{resolve:ssm:${InternalSchedulerTokenSsmPath}}}"
+              },
+              "requestContext": {
+                "http": {
+                  "method": "POST",
+                  "path": "/tickets/expire-reservations",
+                  "protocol": "HTTP/1.1",
+                  "sourceIp": "127.0.0.1",
+                  "userAgent": "EventBridge/1.0"
+                },
+                "stage": "$default"
+              },
+              "body": "{}",
+              "isBase64Encoded": false
+            }
+          DeadLetterConfig:
+            Arn: !GetAtt LambdaDeadLetterQueue.Arn
+          RetryPolicy:
+            MaximumRetryAttempts: 2
+            MaximumEventAgeInSeconds: 1800
+
   # Grant EventBridge permission to invoke the Lambda function.
   ReconciliationSchedulePermission:
     Type: AWS::Lambda::Permission
@@ -469,6 +558,14 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: events.amazonaws.com
       SourceArn: !GetAtt ReconciliationScheduleRule.Arn
+
+  ReservationExpirySchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt ApiFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ReservationExpiryScheduleRule.Arn
 
 # ── Outputs ───────────────────────────────────────────────────────────────────
 # Exported values are used by the deploy script and can be referenced from

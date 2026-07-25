@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using zip02.Services.Refunds.Application;
 using zip02.Services.Refunds.Infrastructure;
@@ -8,6 +9,9 @@ namespace zip02.Controllers;
 [Route("refunds")]
 public class RefundsController(IRefundProcessor refundProcessor) : ControllerBase
 {
+    // SECURITY: Reconciliation can trigger financial actions (refund decisions).
+    // Only organizer roles may invoke this endpoint manually.
+    [Authorize(Policy = "OrganizerWrite")]
     [HttpPost("events/{eventId:guid}/reconcile")]
     public ActionResult<NoShowReconciliationResult> ReconcileNoShows(Guid eventId)
     {
@@ -15,6 +19,9 @@ public class RefundsController(IRefundProcessor refundProcessor) : ControllerBas
         return Ok(result);
     }
 
+    // SECURITY: Manual refund is a privileged, money-impacting operation.
+    // Require authenticated organizer role membership for explicit accountability.
+    [Authorize(Policy = "OrganizerWrite")]
     [HttpPost("tickets/{ticketId:guid}")]
     public ActionResult<RefundTicketResult> RefundBeforeActivation(Guid ticketId, [FromBody] ManualRefundRequest request)
     {

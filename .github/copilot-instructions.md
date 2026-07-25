@@ -8,3 +8,6 @@
 ## Data Modeling Guidelines
 - Contract fields should be required by default; fields should only be optional or editable when there is a clear business reason.
 - Payment-related data should be modeled separately from general ticket fields.
+
+## Security Guidelines
+- When implementing `Program.cs` or security-related changes, add clear comments explaining where security measures are implemented, how they work, and why they are needed.

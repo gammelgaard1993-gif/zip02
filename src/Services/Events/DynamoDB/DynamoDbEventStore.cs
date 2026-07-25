@@ -88,10 +88,13 @@ public sealed class DynamoDbEventStore(IAmazonDynamoDB dynamoDb, string tableNam
                 {
                     TableName = tableName,
                     Item = ToItem(updated),
-                    ConditionExpression = "attribute_exists(PK) AND #name = :name AND StartAtUtc = :start AND EndAtUtc = :end AND Capacity = :capacity",
+                    ConditionExpression = "attribute_exists(PK) AND #name = :name AND #start = :start AND #end = :end AND #capacity = :capacity",
                     ExpressionAttributeNames = new Dictionary<string, string>
                     {
-                        ["#name"] = "Name"
+                        ["#name"] = "Name",
+                        ["#start"] = "StartAtUtc",
+                        ["#end"] = "EndAtUtc",
+                        ["#capacity"] = "Capacity"
                     },
                     ExpressionAttributeValues = new Dictionary<string, AttributeValue>
                     {

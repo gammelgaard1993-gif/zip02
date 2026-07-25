@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using zip02.Services.Events;
 
@@ -7,6 +8,9 @@ namespace zip02.Controllers;
 [Route("events")]
 public class EventsController(IEventStore eventStore) : ControllerBase
 {
+    // SECURITY: Creating events changes organizer-owned state (capacity, geofence,
+    // schedule). Restrict this to authenticated organizer principals.
+    [Authorize(Policy = "OrganizerWrite")]
     [HttpPost]
     public ActionResult<EventResponse> Create([FromBody] CreateEventRequest request)
     {
@@ -27,6 +31,9 @@ public class EventsController(IEventStore eventStore) : ControllerBase
         return evt is null ? NotFound() : Ok(evt);
     }
 
+    // SECURITY: Updating events can impact check-in validity and entitlement.
+    // Require organizer role membership before allowing writes.
+    [Authorize(Policy = "OrganizerWrite")]
     [HttpPatch("{id:guid}")]
     public ActionResult<EventResponse> Update(Guid id, [FromBody] UpdateEventRequest request)
     {

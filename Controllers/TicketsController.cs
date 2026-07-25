@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using zip02.Services.Events;
 using zip02.Services.Ticketing.Contracts;
@@ -46,6 +47,10 @@ public class TicketsController(ITicketStore ticketStore, IEventStore eventStore)
         return updated is null ? NotFound() : Ok(updated);
     }
 
+    // SECURITY: Reservation expiry is an operational/admin action that mutates
+    // ticket state in bulk. Restrict to organizer principals (or scheduled
+    // machine invocation when IAM/authorizer wiring is enabled in API Gateway).
+    [Authorize(Policy = "OrganizerWrite")]
     [HttpPost("expire-reservations")]
     public ActionResult<ExpireReservationsResponse> ExpireReservations([FromBody] ExpireReservationsRequest? request)
     {
